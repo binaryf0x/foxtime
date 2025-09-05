@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-actix-web = "*"
+actix-web = { version = "*", features = ["rustls-0_23"] }
 clap = { version = "*", features = ["derive"] }
 lazy_static = "*"
 mime = "*"
+rustls = "*"
+rustls-pemfile = "*"
 sha256 = "*"

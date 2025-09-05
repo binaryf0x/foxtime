@@ -2,22 +2,28 @@ use actix_web::{App, HttpResponse, HttpServer, Responder, get, http::header, mid
 use clap::Parser;
 use lazy_static::lazy_static;
 use mime;
-use std::time::SystemTime;
+use std::{fs::File, io::BufReader, time::SystemTime};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Args {
-    #[arg(short, long, conflicts_with = "unix", default_value_t = String::from("127.0.0.1"))]
+    #[arg(long, conflicts_with = "unix", default_value_t = String::from("127.0.0.1"))]
     host: String,
 
-    #[arg(short, long, group = "bind", default_value_t = 8123)]
+    #[arg(long, conflicts_with = "unix", default_value_t = 8123)]
     port: u16,
 
-    #[arg(short, long, conflicts_with = "unix", default_value_t = false)]
+    #[arg(long, conflicts_with = "unix", default_value_t = false)]
     h2c: bool,
 
-    #[arg(short, long, group = "bind")]
+    #[arg(long, conflicts_with = "tls_cert", conflicts_with = "tls_key")]
     unix: Option<String>,
+
+    #[arg(long, requires = "tls_key", conflicts_with = "h2c")]
+    tls_cert: Option<String>,
+
+    #[arg(long, requires = "tls_cert", conflicts_with = "h2c")]
+    tls_key: Option<String>,
 }
 
 const INDEX_CSS: &str = include_str!("index.css");
@@ -103,6 +109,28 @@ async fn main() -> std::io::Result<()> {
         server = server.bind_uds(unix)?;
     } else if args.h2c {
         server = server.bind_auto_h2c((args.host.as_str(), args.port))?;
+    } else if let (Some(cert), Some(key)) = (args.tls_cert, args.tls_key) {
+        rustls::crypto::aws_lc_rs::default_provider()
+            .install_default()
+            .unwrap();
+
+        let mut certs_file = BufReader::new(File::open(cert).unwrap());
+        let mut key_file = BufReader::new(File::open(key).unwrap());
+
+        let tls_certs = rustls_pemfile::certs(&mut certs_file)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        let tls_key = rustls_pemfile::pkcs8_private_keys(&mut key_file)
+            .next()
+            .unwrap()
+            .unwrap();
+
+        let tls_config = rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(tls_certs, rustls::pki_types::PrivateKeyDer::Pkcs8(tls_key))
+            .unwrap();
+
+        server = server.bind_rustls_0_23((args.host.as_str(), args.port), tls_config)?;
     } else {
         server = server.bind((args.host.as_str(), args.port))?;
     }
