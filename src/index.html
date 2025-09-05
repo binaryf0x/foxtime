@@ -180,9 +180,10 @@
 
           const delay = average(delays);
           const timeOrigin = average(timeOrigins);
+          const timeOriginOffset = performance.timeOrigin - timeOrigin;
           const offset = new Date() - new Date(performance.now() + timeOrigin);
 
-          postMessage({delay, timeOrigin, offset});
+          postMessage({delay, timeOriginOffset, offset});
         } catch (e) {
           console.error('Failed to request time from server.', e);
           timeoutId = setTimeout(detectOffset, kShortDelay);
@@ -217,12 +218,11 @@
       const blob = new Blob([workerScript], { type: 'application/javascript' });
       const workerScriptUrl = URL.createObjectURL(blob);
       const worker = new Worker(workerScriptUrl, { type: 'module' });
+      worker.postMessage({timeOrigin: performance.timeOrigin});
       worker.onmessage = (event) => {
         document.getElementById('delay').textContent = event.data.delay.toFixed(2);
-
-        timeOrigin = event.data.timeOrigin;
-        const offset = event.data.offset;
-        document.getElementById('offset').textContent = offset;
+        document.getElementById('offset').textContent = event.data.offset;
+        timeOrigin = performance.timeOrigin - event.data.timeOriginOffset;
       }
 
       const clockEmoji = ['🕛', '🕧', '🕐', '🕜', '🕑', '🕝', '🕒', '🕞',
