@@ -18,12 +18,8 @@ struct Args {
 #[get("/")]
 async fn index() -> impl Responder {
     match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(duration) => {
-            let timestamp = format!(
-                "{}.{:03}",
-                duration.as_millis(),
-                duration.subsec_micros() % 1_000
-            );
+        Ok(timestamp) => {
+            let timestamp = (timestamp.as_secs_f64() * 1_000.0).to_string();
             HttpResponse::Ok()
                 .content_type(header::ContentType::html())
                 .insert_header((header::CROSS_ORIGIN_OPENER_POLICY, "same-origin"))
@@ -37,8 +33,8 @@ async fn index() -> impl Responder {
 #[route("/.well-known/time", method = "GET", method = "HEAD")]
 async fn time() -> impl Responder {
     match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(duration) => HttpResponse::Ok()
-            .insert_header(("x-httpstime", duration.as_secs_f64().to_string()))
+        Ok(timestamp) => HttpResponse::Ok()
+            .insert_header(("x-httpstime", timestamp.as_secs_f64().to_string()))
             .finish(),
         _ => HttpResponse::InternalServerError().finish(),
     }
