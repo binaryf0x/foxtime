@@ -72,7 +72,7 @@
         timeOrigin = average(timeOrigins);
 
         const offset = new Date(performance.now() + timeOrigin) - new Date();
-        document.getElementById('offset').textContent = offset.toFixed(2);
+        document.getElementById('offset').textContent = offset;
 
         if (timeOrigins.length < kNumSamples) {
           timeoutId = setTimeout(detectOffset, kShortDelay);
