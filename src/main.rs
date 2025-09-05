@@ -13,6 +13,9 @@ struct Args {
     #[arg(short, long, group = "bind", default_value_t = 8123)]
     port: u16,
 
+    #[arg(short, long, conflicts_with = "unix", default_value_t = false)]
+    h2c: bool,
+
     #[arg(short, long, group = "bind")]
     unix: Option<String>,
 }
@@ -98,6 +101,8 @@ async fn main() -> std::io::Result<()> {
 
     if let Some(unix) = args.unix {
         server = server.bind_uds(unix)?;
+    } else if args.h2c {
+        server = server.bind_auto_h2c((args.host.as_str(), args.port))?;
     } else {
         server = server.bind((args.host.as_str(), args.port))?;
     }
