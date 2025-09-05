@@ -49,6 +49,8 @@ async fn index_css() -> impl Responder {
 async fn index_js() -> impl Responder {
     match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
         Ok(timestamp) => {
+            // Use as_millis_f64() when available:
+            // https://github.com/rust-lang/rust/issues/122451
             let timestamp = (timestamp.as_secs_f64() * 1_000.0).to_string();
             HttpResponse::Ok()
                 .content_type(header::ContentType(mime::TEXT_JAVASCRIPT))
