@@ -55,7 +55,8 @@
       let timeoutId = 0;
       const delays = [];
       const timeOrigins = [];
-      let timeOrigin = INITIAL_SERVER_TIME - performance.now();
+      let lastRequest = performance.now();
+      let timeOrigin = INITIAL_SERVER_TIME - lastRequest;
 
       function average(array) {
         return array.reduce((a, b) => a + b, 0) / array.length;
@@ -67,18 +68,25 @@
           timeOrigins.shift();
         }
 
-        const request_sent = performance.now();
-        const response = await fetch("/time");
-        const response_received = performance.now();
-        const server_time = await response.json();
+        if (performance.now() - lastRequest > 90000) {
+          // The socket has probably timed out. Establish a new connection
+          // before taking a measurement.
+          await fetch('/time');
+        }
 
-        const newDelay = response_received - request_sent;
+        const requestSent = performance.now();
+        const response = await fetch("/time");
+        const responseReceived = performance.now();
+        const serverTime = await response.json();
+        lastRequest = responseReceived;
+
+        const newDelay = responseReceived - requestSent;
         console.log(`Measured round-trip time of ${newDelay.toFixed(2)}ms.`);
         delays.push(newDelay);
         const delay = average(delays);
         document.getElementById('delay').textContent = delay.toFixed(2);
 
-        const newTimeOrigin = ((server_time - request_sent) + (server_time - response_received)) / 2;
+        const newTimeOrigin = ((serverTime - requestSent) + (serverTime - responseReceived)) / 2;
         console.log(`Measured time origin of ${newTimeOrigin}.`);
         timeOrigins.push(newTimeOrigin);
         timeOrigin = average(timeOrigins);
