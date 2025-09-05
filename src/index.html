@@ -9,7 +9,7 @@
         text-align: center;
       }
       #time {
-        font-size: 25vw;
+        font-size: 20vw;
         text-align: center;
         margin: 10px 0;
       }
@@ -45,7 +45,8 @@
         const hours = now.getHours().toString().padStart(2, '0');
         const minutes = now.getMinutes().toString().padStart(2, '0');
         const seconds = now.getSeconds().toString().padStart(2, '0');
-        document.getElementById('time').textContent = `${hours}:${minutes}:${seconds}`;
+        const tenths = Math.floor(now.getMilliseconds() / 100).toString();
+        document.getElementById('time').textContent = `${hours}:${minutes}:${seconds}.${tenths}`;
 
         const emojiIndex = (now.getHours() % 12) * 2 + Math.floor(now.getMinutes() / 30);
         const emoji = clockEmoji[emojiIndex];
