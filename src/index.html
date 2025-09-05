@@ -123,10 +123,11 @@
       const kNumSamples = 5;
       const kShortDelay = 1000;
       const kLongDelay = 60000;
+      const kSocketTimeout = 10000;
       const timeUrl = new URL('/time', location.origin);
       let timeoutId = 0;
-      const delays = [];
-      const timeOrigins = [];
+      let delays = [];
+      let timeOrigins = [];
       let lastRequest = performance.now();
       let hidden = false;
 
@@ -138,7 +139,7 @@
         timeoutId = undefined;
 
         try {
-          if (performance.now() - lastRequest > 10000) {
+          if (performance.now() - lastRequest > kSocketTimeout) {
             // The socket has probably timed out. Establish a new connection
             // before taking a measurement.
             await fetch(timeUrl);
@@ -155,22 +156,31 @@
 
           lastRequest = responseReceived;
 
+          const newDelay = responseReceived - requestSent;
+          console.log(`Measured round-trip time of ${newDelay.toFixed(2)}ms.`);
+          const newTimeOrigin = ((serverTime - requestSent) + (serverTime - responseReceived)) / 2;
+          console.log(`Measured time origin of ${newTimeOrigin}.`);
+
+          if (timeOrigins.length > 0) {
+            const oldTimeOrigin = average(timeOrigins);
+            if (Math.abs(oldTimeOrigin - newTimeOrigin) > newDelay) {
+              console.log('Large clock drift detected, clearing measurement history.');
+              delays = [];
+              timeOrigins = [];
+            }
+          }
+
           if (timeOrigins.length >= kNumSamples) {
             delays.shift();
             timeOrigins.shift();
           }
 
-          const newDelay = responseReceived - requestSent;
-          console.log(`Measured round-trip time of ${newDelay.toFixed(2)}ms.`);
           delays.push(newDelay);
-          const delay = average(delays);
-
-          const newTimeOrigin = ((serverTime - requestSent) + (serverTime - responseReceived)) / 2;
-          console.log(`Measured time origin of ${newTimeOrigin}.`);
           timeOrigins.push(newTimeOrigin);
-          const timeOrigin = average(timeOrigins);
 
-          const offset = new Date() - new Date(performance.now() + timeOrigin)
+          const delay = average(delays);
+          const timeOrigin = average(timeOrigins);
+          const offset = new Date() - new Date(performance.now() + timeOrigin);
 
           postMessage({delay, timeOrigin, offset});
         } catch (e) {
@@ -188,10 +198,12 @@
 
         if (hidden) {
           if (timeoutId) {
+            console.log('Pausing measurements.');
             clearTimeout(timeoutId);
             timeoutId = undefined;
           }
         } else if (!timeoutId) {
+          console.log('Resuming measurements.');
           timeoutId = setTimeout(detectOffset, kShortDelay);
         }
       };
