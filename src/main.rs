@@ -19,7 +19,11 @@ async fn index() -> impl Responder {
 #[get("/time")]
 async fn time() -> impl Responder {
     let timestamp = match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(timestamp) => timestamp.as_millis().to_string(),
+        Ok(timestamp) => format!(
+            "{}.{:03}",
+            timestamp.as_millis(),
+            timestamp.subsec_micros() % 1_000
+        ),
         _ => return HttpResponse::InternalServerError().finish(),
     };
     HttpResponse::Ok()
