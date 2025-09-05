@@ -142,11 +142,11 @@
           if (performance.now() - lastRequest > kSocketTimeout) {
             // The socket has probably timed out. Establish a new connection
             // before taking a measurement.
-            await fetch(timeUrl);
+            await fetch(timeUrl, {method: 'HEAD'});
           }
 
           const requestSent = performance.now();
-          const response = await fetch(timeUrl);
+          const response = await fetch(timeUrl, {method: 'HEAD'});
           const responseReceived = performance.now();
 
           if (hidden) {

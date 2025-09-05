@@ -1,4 +1,4 @@
-use actix_web::{App, HttpResponse, HttpServer, Responder, get, http::header, middleware};
+use actix_web::{App, HttpResponse, HttpServer, Responder, get, http::header, middleware, route};
 use clap::Parser;
 use std::time::SystemTime;
 
@@ -34,7 +34,7 @@ async fn index() -> impl Responder {
     }
 }
 
-#[get("/.well-known/time")]
+#[route("/.well-known/time", method = "GET", method = "HEAD")]
 async fn time() -> impl Responder {
     match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
         Ok(duration) => HttpResponse::Ok()
