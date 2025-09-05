@@ -6,3 +6,6 @@ edition = "2024"
 [dependencies]
 actix-web = "4.10.2"
 clap = { version = "4.5.36", features = ["derive"] }
+lazy_static = "1.5.0"
+mime = "0.3.17"
+sha256 = "1.6.0"
