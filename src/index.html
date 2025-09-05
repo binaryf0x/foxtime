@@ -33,13 +33,35 @@
         '🕓', '🕟', '🕔', '🕠', '🕕', '🕡', '🕖', '🕣', '🕗', '🕢', '🕘',
         '🕤', '🕙', '🕥', '🕚', '🕦'];
 
-      const request_sent = Date.now();
-      const server_time = Number(await (await fetch("/time")).text());
-      const response_received = Date.now();
-      const delay = response_received - request_sent;
-      document.getElementById('delay').textContent = delay;
-      const offset = ((server_time - request_sent) + (server_time - response_received)) / 2;
-      document.getElementById('offset').textContent = offset;
+      const delays = [];
+      const offsets = [];
+      let offset;
+
+      function average(array) {
+        return array.reduce((a, b) => a + b, 0) / array.length;
+      }
+
+      async function detectOffset() {
+        const request_sent = Date.now();
+        const server_time = Number(await (await fetch("/time")).text());
+        const response_received = Date.now();
+
+        const newDelay = response_received - request_sent;
+        console.log(`Measured round-trip time of ${newDelay}ms.`);
+        delays.push(newDelay);
+        const delay = average(delays);
+        document.getElementById('delay').textContent = delay;
+
+        const newOffset = ((server_time - request_sent) + (server_time - response_received)) / 2;
+        console.log(`Measured clock offset of ${newOffset}ms`);
+        offsets.push(newOffset);
+        offset = average(offsets);
+        document.getElementById('offset').textContent = offset;
+
+        if (offsets.length < 5) {
+          setTimeout(detectOffset, 1000);
+        }
+      }
 
       function updateTime() {
         const now = new Date(Date.now() + offset);
@@ -55,6 +77,7 @@
         requestAnimationFrame(updateTime);
       }
 
+      await detectOffset();
       updateTime();
       requestAnimationFrame(updateTime);
     </script>
