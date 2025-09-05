@@ -1,0 +1,60 @@
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>🦊🕒</title>
+    <style>
+      h1 {
+        font-size: 15vw;
+        margin: 0;
+        text-align: center;
+      }
+      #time {
+        font-size: 25vw;
+        text-align: center;
+        margin: 10px 0;
+      }
+      #status {
+        font-family: sans-serif;
+        position: fixed;
+        bottom: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <h1 id="title">🦊🕒</h1>
+    <p id="time"></p>
+    <p id="status">
+      RTT: <span id="delay">?</span>ms<br>
+      Offset: <span id="offset">?</span>ms
+    </p>
+    <script type="module">
+      const clockEmoji = ['🕛', '🕧', '🕐', '🕜', '🕑', '🕝', '🕒', '🕞',
+        '🕓', '🕟', '🕔', '🕠', '🕕', '🕡', '🕖', '🕣', '🕗', '🕢', '🕘',
+        '🕤', '🕙', '🕥', '🕚', '🕦'];
+
+      const request_sent = Date.now();
+      const server_time = Number(await (await fetch("/time")).text());
+      const response_received = Date.now();
+      const delay = response_received - request_sent;
+      document.getElementById('delay').textContent = delay;
+      const offset = ((server_time - request_sent) + (server_time - response_received)) / 2;
+      document.getElementById('offset').textContent = offset;
+
+      function updateTime() {
+        const now = new Date(Date.now() + offset);
+        const hours = now.getHours().toString().padStart(2, '0');
+        const minutes = now.getMinutes().toString().padStart(2, '0');
+        const seconds = now.getSeconds().toString().padStart(2, '0');
+        document.getElementById('time').textContent = `${hours}:${minutes}:${seconds}`;
+
+        const emojiIndex = (now.getHours() % 12) * 2 + Math.floor(now.getMinutes() / 30);
+        const emoji = clockEmoji[emojiIndex];
+        document.title = document.getElementById('title').textContent = `🦊${emoji}`;
+        requestAnimationFrame(updateTime);
+      }
+
+      updateTime();
+      requestAnimationFrame(updateTime);
+    </script>
+  </body>
+</html>
