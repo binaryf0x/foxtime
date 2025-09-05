@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 actix-web = "4.10.2"
+clap = { version = "4.5.36", features = ["derive"] }
