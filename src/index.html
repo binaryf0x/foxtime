@@ -63,33 +63,39 @@
       }
 
       async function detectOffset() {
-        if (timeOrigins.length >= kNumSamples) {
-          delays.shift();
-          timeOrigins.shift();
+        try {
+          if (performance.now() - lastRequest > 10000) {
+            // The socket has probably timed out. Establish a new connection
+            // before taking a measurement.
+            await fetch('/time');
+          }
+
+          const requestSent = performance.now();
+          const response = await fetch("/time");
+          const responseReceived = performance.now();
+          const serverTime = await response.json();
+          lastRequest = responseReceived;
+
+          if (timeOrigins.length >= kNumSamples) {
+            delays.shift();
+            timeOrigins.shift();
+          }
+
+          const newDelay = responseReceived - requestSent;
+          console.log(`Measured round-trip time of ${newDelay.toFixed(2)}ms.`);
+          delays.push(newDelay);
+          const delay = average(delays);
+          document.getElementById('delay').textContent = delay.toFixed(2);
+
+          const newTimeOrigin = ((serverTime - requestSent) + (serverTime - responseReceived)) / 2;
+          console.log(`Measured time origin of ${newTimeOrigin}.`);
+          timeOrigins.push(newTimeOrigin);
+          timeOrigin = average(timeOrigins);
+        } catch (e) {
+          console.error('Failed to request time from server.', e);
+          timeoutId = setTimeout(detectOffset, kShortDelay);
+          return;
         }
-
-        if (performance.now() - lastRequest > 10000) {
-          // The socket has probably timed out. Establish a new connection
-          // before taking a measurement.
-          await fetch('/time');
-        }
-
-        const requestSent = performance.now();
-        const response = await fetch("/time");
-        const responseReceived = performance.now();
-        const serverTime = await response.json();
-        lastRequest = responseReceived;
-
-        const newDelay = responseReceived - requestSent;
-        console.log(`Measured round-trip time of ${newDelay.toFixed(2)}ms.`);
-        delays.push(newDelay);
-        const delay = average(delays);
-        document.getElementById('delay').textContent = delay.toFixed(2);
-
-        const newTimeOrigin = ((serverTime - requestSent) + (serverTime - responseReceived)) / 2;
-        console.log(`Measured time origin of ${newTimeOrigin}.`);
-        timeOrigins.push(newTimeOrigin);
-        timeOrigin = average(timeOrigins);
 
         const offset = new Date() - new Date(performance.now() + timeOrigin);
         document.getElementById('offset').textContent = offset;
