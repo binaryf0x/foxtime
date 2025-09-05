@@ -68,7 +68,7 @@
           timeOrigins.shift();
         }
 
-        if (performance.now() - lastRequest > 90000) {
+        if (performance.now() - lastRequest > 10000) {
           // The socket has probably timed out. Establish a new connection
           // before taking a measurement.
           await fetch('/time');
