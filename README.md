@@ -4,6 +4,8 @@ An implementation of the [Time over HTTPS Specification] with a pretty front-end
 providing analog and digital clock displays synchronized using a simplified
 version of the NTP algorithm.
 
+[Demo site](https://time.foxontheinter.net).
+
 ## Usage
 
 By default the server listens for HTTP connections on 127.0.0.1 port 8123.
