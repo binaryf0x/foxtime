@@ -153,6 +153,12 @@
             return;
           }
 
+          if (!response.ok) {
+            console.error(`Server returned error: ${response.status}`);
+            timeoutId = setTimeout(detectOffset, kShortDelay);
+            return;
+          }
+
           lastRequest = responseReceived;
           const serverTime = Number(response.headers.get('x-httpstime')) * 1_000;
 
