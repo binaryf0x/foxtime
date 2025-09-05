@@ -25,14 +25,16 @@ lazy_static! {
     static ref WORKER_JS_HASH: String = sha256::digest(WORKER_JS);
     static ref INDEX_JS: String =
         include_str!("index.js").replace("WORKER_JS_HASH", &WORKER_JS_HASH);
-    static ref INDEX_HTML: String = include_str!("index.html")
-        .replace("INDEX_CSS_HASH", &INDEX_CSS_HASH);
+    static ref INDEX_HTML: String =
+        include_str!("index.html").replace("INDEX_CSS_HASH", &INDEX_CSS_HASH);
 }
 
 #[get("/")]
 async fn index() -> impl Responder {
     HttpResponse::Ok()
         .content_type(header::ContentType::html())
+        .insert_header((header::CROSS_ORIGIN_OPENER_POLICY, "same-origin"))
+        .insert_header((header::CROSS_ORIGIN_EMBEDDER_POLICY, "require-corp"))
         .body(INDEX_HTML.as_str())
 }
 
@@ -51,6 +53,8 @@ async fn index_js() -> impl Responder {
             HttpResponse::Ok()
                 .content_type(header::ContentType(mime::TEXT_JAVASCRIPT))
                 .append_header(header::CacheControl(vec![header::CacheDirective::NoStore]))
+                .insert_header((header::CROSS_ORIGIN_OPENER_POLICY, "same-origin"))
+                .insert_header((header::CROSS_ORIGIN_EMBEDDER_POLICY, "require-corp"))
                 .body(INDEX_JS.replace("INITIAL_SERVER_TIME", &timestamp))
         }
         _ => HttpResponse::InternalServerError().finish(),
@@ -61,6 +65,8 @@ async fn index_js() -> impl Responder {
 async fn worker_js() -> impl Responder {
     HttpResponse::Ok()
         .content_type(header::ContentType(mime::TEXT_JAVASCRIPT))
+        .insert_header((header::CROSS_ORIGIN_OPENER_POLICY, "same-origin"))
+        .insert_header((header::CROSS_ORIGIN_EMBEDDER_POLICY, "require-corp"))
         .body(WORKER_JS)
 }
 
