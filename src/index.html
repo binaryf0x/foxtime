@@ -24,10 +24,10 @@
   </head>
   <body>
     <h1 id="title">🦊🕒</h1>
-    <p id="time"></p>
+    <p id="time">??:??:??.?</p>
     <p id="status">
       RTT: <span id="delay">?</span>ms<br>
-      Offset: <span id="offset">?</span>ms
+      Offset: <span id="offset">?</span>ms<br>
     </p>
     <script type="module">
       const clockEmoji = ['🕛', '🕧', '🕐', '🕜', '🕑', '🕝', '🕒', '🕞',
@@ -37,45 +37,52 @@
       const kNumSamples = 5;
       const kShortDelay = 1000;
       const kLongDelay = 60000;
+      let timeoutId = 0;
       const delays = [];
-      const offsets = [];
-      let offset = 0;
+      const timeOrigins = [];
+      let timeOrigin = 0;
 
       function average(array) {
         return array.reduce((a, b) => a + b, 0) / array.length;
       }
 
       async function detectOffset() {
-        if (offsets.length >= kNumSamples) {
+        if (timeOrigins.length >= kNumSamples) {
           delays.shift();
-          offsets.shift();
+          timeOrigins.shift();
         }
 
-        const request_sent = Date.now();
+        const request_sent = performance.now();
         const server_time = Number(await (await fetch("/time")).text());
-        const response_received = Date.now();
+        const response_received = performance.now();
+
+        if (timeOrigins.length === 0) {
+          requestAnimationFrame(updateTime);
+        }
 
         const newDelay = response_received - request_sent;
-        console.log(`Measured round-trip time of ${newDelay}ms.`);
+        console.log(`Measured round-trip time of ${newDelay.toFixed(2)}ms.`);
         delays.push(newDelay);
         const delay = average(delays);
-        document.getElementById('delay').textContent = delay;
+        document.getElementById('delay').textContent = delay.toFixed(2);
 
-        const newOffset = ((server_time - request_sent) + (server_time - response_received)) / 2;
-        console.log(`Measured clock offset of ${newOffset}ms`);
-        offsets.push(newOffset);
-        offset = average(offsets);
-        document.getElementById('offset').textContent = offset;
+        const newTimeOrigin = ((server_time - request_sent) + (server_time - response_received)) / 2;
+        console.log(`Measured time origin of ${newTimeOrigin}.`);
+        timeOrigins.push(newTimeOrigin);
+        timeOrigin = average(timeOrigins);
 
-        if (offsets.length < kNumSamples) {
-          setTimeout(detectOffset, kShortDelay);
+        const offset = new Date(performance.now() + timeOrigin) - new Date();
+        document.getElementById('offset').textContent = offset.toFixed(2);
+
+        if (timeOrigins.length < kNumSamples) {
+          timeoutId = setTimeout(detectOffset, kShortDelay);
         } else {
-          setTimeout(detectOffset, kLongDelay);
+          timeoutId = setTimeout(detectOffset, kLongDelay);
         }
       }
 
       function updateTime() {
-        const now = new Date(Date.now() + offset);
+        const now = new Date(performance.now() + timeOrigin);
         const hours = now.getHours().toString().padStart(2, '0');
         const minutes = now.getMinutes().toString().padStart(2, '0');
         const seconds = now.getSeconds().toString().padStart(2, '0');
@@ -88,8 +95,23 @@
         requestAnimationFrame(updateTime);
       }
 
-      setTimeout(detectOffset, kShortDelay);
-      requestAnimationFrame(updateTime);
+      timeoutId = setTimeout(detectOffset, kShortDelay);
+
+      // Avoid taking measurements when the tab is hidden as it could be
+      // throttled which will skew RTT measurements.
+      document.onvisibilitychange = () => {
+        if (document.hidden) {
+          console.log("Pausing measurements.");
+          clearTimeout(timeoutId);
+        } else {
+          console.log("Resuming measurements.");
+          if (timeOrigins.length < kNumSamples) {
+            timeoutId = setTimeout(detectOffset, kShortDelay);
+          } else {
+            timeoutId = setTimeout(detectOffset, kLongDelay);
+          }
+        }
+      };
     </script>
   </body>
 </html>
