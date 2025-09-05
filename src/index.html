@@ -34,15 +34,23 @@
         '🕓', '🕟', '🕔', '🕠', '🕕', '🕡', '🕖', '🕣', '🕗', '🕢', '🕘',
         '🕤', '🕙', '🕥', '🕚', '🕦'];
 
+      const kNumSamples = 5;
+      const kShortDelay = 1000;
+      const kLongDelay = 60000;
       const delays = [];
       const offsets = [];
-      let offset;
+      let offset = 0;
 
       function average(array) {
         return array.reduce((a, b) => a + b, 0) / array.length;
       }
 
       async function detectOffset() {
+        if (offsets.length >= kNumSamples) {
+          delays.shift();
+          offsets.shift();
+        }
+
         const request_sent = Date.now();
         const server_time = Number(await (await fetch("/time")).text());
         const response_received = Date.now();
@@ -59,8 +67,10 @@
         offset = average(offsets);
         document.getElementById('offset').textContent = offset;
 
-        if (offsets.length < 5) {
-          setTimeout(detectOffset, 1000);
+        if (offsets.length < kNumSamples) {
+          setTimeout(detectOffset, kShortDelay);
+        } else {
+          setTimeout(detectOffset, kLongDelay);
         }
       }
 
@@ -78,8 +88,7 @@
         requestAnimationFrame(updateTime);
       }
 
-      await detectOffset();
-      updateTime();
+      setTimeout(detectOffset, kShortDelay);
       requestAnimationFrame(updateTime);
     </script>
   </body>
