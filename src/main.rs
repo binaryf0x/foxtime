@@ -1,12 +1,16 @@
 use std::time::SystemTime;
 
-use actix_web::{get, App, HttpResponse, HttpServer, Responder};
-use actix_web::http::header::ContentType;
+use actix_web::http::header::{
+    CROSS_ORIGIN_EMBEDDER_POLICY, CROSS_ORIGIN_OPENER_POLICY, ContentType,
+};
+use actix_web::{App, HttpResponse, HttpServer, Responder, get};
 
 #[get("/")]
 async fn index() -> impl Responder {
     HttpResponse::Ok()
         .content_type(ContentType::html())
+        .append_header((CROSS_ORIGIN_OPENER_POLICY, "same-origin"))
+        .append_header((CROSS_ORIGIN_EMBEDDER_POLICY, "require-corp"))
         .body(include_str!("index.html"))
 }
 
