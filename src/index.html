@@ -2,6 +2,7 @@
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
     <meta name="color-scheme" content="dark light">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🦊🕒</title>
     <style>
       h1 {
@@ -19,6 +20,16 @@
         font-family: sans-serif;
         position: fixed;
         bottom: 0;
+        left: 0;
+        margin: 8;
+      }
+      #wake-lock {
+        font-family: sans-serif;
+        position: fixed;
+        bottom: 0;
+        right: 0;
+        margin: 8;
+        align-items: center;
       }
     </style>
   </head>
@@ -28,6 +39,10 @@
     <p id="status">
       RTT: <span id="delay">?</span>ms<br>
       Offset: <span id="offset">?</span>ms<br>
+    </p>
+    <p id="wake-lock" style="display: none">
+      <label for="enable-wake-lock">Keep screen on:</label>
+      <input type="checkbox" id="enable-wake-lock">
     </p>
     <script type="module">
       const clockEmoji = ['🕛', '🕧', '🕐', '🕜', '🕑', '🕝', '🕒', '🕞',
@@ -110,6 +125,30 @@
           }
         }
       };
+
+      if (navigator.wakeLock?.request) {
+        document.getElementById('wake-lock').style.display = 'flex';
+        const toggle = document.getElementById('enable-wake-lock');
+        let wakeLock = null;
+        toggle.addEventListener('change', async () => {
+          if (toggle.checked && !wakeLock) {
+            toggle.disabled = true;
+            try {
+              wakeLock = await navigator.wakeLock.request('screen');
+              wakeLock.onrelease = () => {
+                toggle.checked = false;
+              }
+            } catch (e) {
+              console.error("Failed to acquire wake lock!", e);
+            } finally {
+              toggle.disabled = false;
+            }
+          } else if (!toggle.checked && wakeLock) {
+            wakeLock.release();
+            wakeLock = null;
+          }
+        });
+      }
     </script>
   </body>
 </html>
