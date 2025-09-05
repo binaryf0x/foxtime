@@ -71,7 +71,7 @@
         timeOrigins.push(newTimeOrigin);
         timeOrigin = average(timeOrigins);
 
-        const offset = new Date(performance.now() + timeOrigin) - new Date();
+        const offset = new Date() - new Date(performance.now() + timeOrigin);
         document.getElementById('offset').textContent = offset;
 
         if (timeOrigins.length < kNumSamples) {
