@@ -53,7 +53,7 @@
         }
 
         const request_sent = performance.now();
-        const server_time = Number(await (await fetch("/time")).text());
+        const server_time = await (await fetch("/time")).json();
         const response_received = performance.now();
 
         const newDelay = response_received - request_sent;
