@@ -94,10 +94,9 @@
         const offset = new Date() - new Date(performance.now() + timeOrigin);
         document.getElementById('offset').textContent = offset;
 
-        if (timeOrigins.length < kNumSamples) {
-          timeoutId = setTimeout(detectOffset, kShortDelay);
-        } else {
-          timeoutId = setTimeout(detectOffset, kLongDelay);
+        if (!document.hidden) {
+          timeoutId = setTimeout(
+              detectOffset, timeOrigins.length < kNumSamples ? kShortDelay : kLongDelay);
         }
       }
 
@@ -126,11 +125,7 @@
           clearTimeout(timeoutId);
         } else {
           console.log("Resuming measurements.");
-          if (timeOrigins.length < kNumSamples) {
-            timeoutId = setTimeout(detectOffset, kShortDelay);
-          } else {
-            timeoutId = setTimeout(detectOffset, kLongDelay);
-          }
+          timeoutId = setTimeout(detectOffset, kShortDelay);
         }
       };
 
