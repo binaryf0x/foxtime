@@ -9,4 +9,4 @@ WORKDIR /app
 COPY --from=build /build/target/release/foxtime .
 USER 1000
 EXPOSE 8123
-CMD ["./foxtime"]
+CMD ["./foxtime", "--host", "0.0.0.0"]
