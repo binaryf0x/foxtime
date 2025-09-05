@@ -119,28 +119,16 @@
       <label for="enable-wake-lock">Keep screen on:</label>
       <input type="checkbox" id="enable-wake-lock">
     </p>
-    <script type="module">
-      const clockEmoji = ['🕛', '🕧', '🕐', '🕜', '🕑', '🕝', '🕒', '🕞',
-        '🕓', '🕟', '🕔', '🕠', '🕕', '🕡', '🕖', '🕣', '🕗', '🕢', '🕘',
-        '🕤', '🕙', '🕥', '🕚', '🕦'];
-
-      const clock = document.getElementById('clock');
-      const hourTransform = clock.createSVGTransform();
-      document.getElementById('hour-hand').transform.baseVal.initialize(hourTransform);
-      const minuteTransform = clock.createSVGTransform();
-      document.getElementById('minute-hand').transform.baseVal.initialize(minuteTransform);
-      const secondTransform = clock.createSVGTransform();
-      document.getElementById('second-hand').transform.baseVal.initialize(secondTransform);
-      const time = document.getElementById('time');
-
+    <xmp id="worker-script" style="display: none">
       const kNumSamples = 5;
       const kShortDelay = 1000;
       const kLongDelay = 60000;
+      const timeUrl = new URL('/time', location.origin);
       let timeoutId = 0;
       const delays = [];
       const timeOrigins = [];
       let lastRequest = performance.now();
-      let timeOrigin = INITIAL_SERVER_TIME - lastRequest;
+      let hidden = false;
 
       function average(array) {
         return array.reduce((a, b) => a + b, 0) / array.length;
@@ -153,13 +141,18 @@
           if (performance.now() - lastRequest > 10000) {
             // The socket has probably timed out. Establish a new connection
             // before taking a measurement.
-            await fetch('/time');
+            await fetch(timeUrl);
           }
 
           const requestSent = performance.now();
-          const response = await fetch("/time");
+          const response = await fetch(timeUrl);
           const responseReceived = performance.now();
           const serverTime = await response.json();
+
+          if (hidden) {
+            return;
+          }
+
           lastRequest = responseReceived;
 
           if (timeOrigins.length >= kNumSamples) {
@@ -171,26 +164,67 @@
           console.log(`Measured round-trip time of ${newDelay.toFixed(2)}ms.`);
           delays.push(newDelay);
           const delay = average(delays);
-          document.getElementById('delay').textContent = delay.toFixed(2);
 
           const newTimeOrigin = ((serverTime - requestSent) + (serverTime - responseReceived)) / 2;
           console.log(`Measured time origin of ${newTimeOrigin}.`);
           timeOrigins.push(newTimeOrigin);
-          timeOrigin = average(timeOrigins);
+          const timeOrigin = average(timeOrigins);
+
+          const offset = new Date() - new Date(performance.now() + timeOrigin)
+
+          postMessage({delay, timeOrigin, offset});
         } catch (e) {
           console.error('Failed to request time from server.', e);
           timeoutId = setTimeout(detectOffset, kShortDelay);
           return;
         }
 
-        const offset = new Date() - new Date(performance.now() + timeOrigin);
-        document.getElementById('offset').textContent = offset;
-
-        if (!document.hidden) {
-          timeoutId = setTimeout(
-              detectOffset, timeOrigins.length < kNumSamples ? kShortDelay : kLongDelay);
-        }
+        timeoutId = setTimeout(
+            detectOffset, timeOrigins.length < kNumSamples ? kShortDelay : kLongDelay);
       }
+
+      self.onmessage = (event) => {
+        hidden = event.data.hidden;
+
+        if (hidden) {
+          if (timeoutId) {
+            clearTimeout(timeoutId);
+            timeoutId = undefined;
+          }
+        } else if (!timeoutId) {
+          timeoutId = setTimeout(detectOffset, kShortDelay);
+        }
+      };
+
+      timeoutId = setTimeout(detectOffset, kShortDelay);
+    </xmp>
+    <script type="module">
+      let timeOrigin = INITIAL_SERVER_TIME - performance.now();
+
+      const workerScript = document.getElementById('worker-script').textContent;
+      const blob = new Blob([workerScript], { type: 'application/javascript' });
+      const workerScriptUrl = URL.createObjectURL(blob);
+      const worker = new Worker(workerScriptUrl, { type: 'module' });
+      worker.onmessage = (event) => {
+        document.getElementById('delay').textContent = event.data.delay.toFixed(2);
+
+        timeOrigin = event.data.timeOrigin;
+        const offset = event.data.offset;
+        document.getElementById('offset').textContent = offset;
+      }
+
+      const clockEmoji = ['🕛', '🕧', '🕐', '🕜', '🕑', '🕝', '🕒', '🕞',
+        '🕓', '🕟', '🕔', '🕠', '🕕', '🕡', '🕖', '🕣', '🕗', '🕢', '🕘',
+        '🕤', '🕙', '🕥', '🕚', '🕦'];
+
+      const clock = document.getElementById('clock');
+      const hourTransform = clock.createSVGTransform();
+      document.getElementById('hour-hand').transform.baseVal.initialize(hourTransform);
+      const minuteTransform = clock.createSVGTransform();
+      document.getElementById('minute-hand').transform.baseVal.initialize(minuteTransform);
+      const secondTransform = clock.createSVGTransform();
+      document.getElementById('second-hand').transform.baseVal.initialize(secondTransform);
+      const time = document.getElementById('time');
 
       function updateTime() {
         const now = new Date(performance.now() + timeOrigin);
@@ -217,21 +251,10 @@
 
         requestAnimationFrame(updateTime);
       }
-
       updateTime();
-      timeoutId = setTimeout(detectOffset, kShortDelay);
 
-      // Avoid taking measurements when the tab is hidden as it could be
-      // throttled which will skew RTT measurements.
       document.onvisibilitychange = () => {
-        if (document.hidden && timeoutId !== undefined) {
-          console.log("Pausing measurements.");
-          clearTimeout(timeoutId);
-          timeoutId = undefined;
-        } else if (!document.hidden && timeoutId === undefined) {
-          console.log("Resuming measurements.");
-          timeoutId = setTimeout(detectOffset, kShortDelay);
-        }
+        worker.postMessage({hidden: document.hidden});
       };
 
       if (navigator.wakeLock?.request) {
