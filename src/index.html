@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <html>
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
@@ -21,14 +22,14 @@
         position: fixed;
         bottom: 0;
         left: 0;
-        margin: 8;
+        margin: 8px;
       }
       #wake-lock {
         font-family: sans-serif;
         position: fixed;
         bottom: 0;
         right: 0;
-        margin: 8;
+        margin: 8px;
         align-items: center;
       }
     </style>
@@ -63,6 +64,8 @@
       }
 
       async function detectOffset() {
+        timeoutId = undefined;
+
         try {
           if (performance.now() - lastRequest > 10000) {
             // The socket has probably timed out. Establish a new connection
@@ -126,10 +129,11 @@
       // Avoid taking measurements when the tab is hidden as it could be
       // throttled which will skew RTT measurements.
       document.onvisibilitychange = () => {
-        if (document.hidden) {
+        if (document.hidden && timeoutId !== undefined) {
           console.log("Pausing measurements.");
           clearTimeout(timeoutId);
-        } else {
+          timeoutId = undefined;
+        } else if (!document.hidden && timeoutId === undefined) {
           console.log("Resuming measurements.");
           timeoutId = setTimeout(detectOffset, kShortDelay);
         }
@@ -146,6 +150,7 @@
               wakeLock = await navigator.wakeLock.request('screen');
               wakeLock.onrelease = () => {
                 toggle.checked = false;
+                wakeLock = null;
               }
             } catch (e) {
               console.error("Failed to acquire wake lock!", e);
