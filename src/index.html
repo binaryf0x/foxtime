@@ -124,7 +124,7 @@
       const kShortDelay = 1000;
       const kLongDelay = 60000;
       const kSocketTimeout = 10000;
-      const timeUrl = new URL('/time', location.origin);
+      const timeUrl = new URL('/.well-known/time', location.origin);
       let timeoutId = 0;
       let delays = [];
       let timeOrigins = [];
@@ -148,13 +148,13 @@
           const requestSent = performance.now();
           const response = await fetch(timeUrl);
           const responseReceived = performance.now();
-          const serverTime = await response.json();
 
           if (hidden) {
             return;
           }
 
           lastRequest = responseReceived;
+          const serverTime = Number(response.headers.get('x-httpstime')) * 1_000;
 
           const newDelay = responseReceived - requestSent;
           console.log(`Measured round-trip time of ${newDelay.toFixed(2)}ms.`);

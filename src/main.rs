@@ -1,7 +1,6 @@
-use std::time::{SystemTime, SystemTimeError};
-
 use actix_web::{App, HttpResponse, HttpServer, Responder, get, http::header, middleware};
 use clap::Parser;
+use std::time::SystemTime;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -16,36 +15,31 @@ struct Args {
     unix: Option<String>,
 }
 
-fn timestamp() -> Result<String, SystemTimeError> {
-    let timestamp = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?;
-    Ok(format!(
-        "{}.{:03}",
-        timestamp.as_millis(),
-        timestamp.subsec_micros() % 1_000
-    ))
-}
-
 #[get("/")]
 async fn index() -> impl Responder {
-    match timestamp() {
-        Ok(timestamp) => HttpResponse::Ok()
-            .content_type(header::ContentType::html())
-            .insert_header(header::CacheControl(vec![header::CacheDirective::NoStore]))
-            .insert_header((header::CROSS_ORIGIN_OPENER_POLICY, "same-origin"))
-            .insert_header((header::CROSS_ORIGIN_EMBEDDER_POLICY, "require-corp"))
-            .body(include_str!("index.html").replace("INITIAL_SERVER_TIME", &timestamp)),
+    match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(duration) => {
+            let timestamp = format!(
+                "{}.{:03}",
+                duration.as_millis(),
+                duration.subsec_micros() % 1_000
+            );
+            HttpResponse::Ok()
+                .content_type(header::ContentType::html())
+                .insert_header((header::CROSS_ORIGIN_OPENER_POLICY, "same-origin"))
+                .insert_header((header::CROSS_ORIGIN_EMBEDDER_POLICY, "require-corp"))
+                .body(include_str!("index.html").replace("INITIAL_SERVER_TIME", &timestamp))
+        }
         _ => HttpResponse::InternalServerError().finish(),
     }
 }
 
-#[get("/time")]
+#[get("/.well-known/time")]
 async fn time() -> impl Responder {
-    match timestamp() {
-        Ok(timestamp) => HttpResponse::Ok()
-            .content_type(header::ContentType::json())
-            .insert_header(header::ContentEncoding::Identity)
-            .insert_header(header::CacheControl(vec![header::CacheDirective::NoStore]))
-            .body(timestamp),
+    match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+        Ok(duration) => HttpResponse::Ok()
+            .insert_header(("x-httpstime", duration.as_secs_f64().to_string()))
+            .finish(),
         _ => HttpResponse::InternalServerError().finish(),
     }
 }
