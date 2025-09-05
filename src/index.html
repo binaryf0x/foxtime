@@ -53,8 +53,9 @@
         }
 
         const request_sent = performance.now();
-        const server_time = await (await fetch("/time")).json();
+        const response = await fetch("/time");
         const response_received = performance.now();
+        const server_time = await response.json();
 
         const newDelay = response_received - request_sent;
         console.log(`Measured round-trip time of ${newDelay.toFixed(2)}ms.`);
