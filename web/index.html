@@ -5,7 +5,7 @@
     <meta name="color-scheme" content="dark light">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>🦊🕒</title>
-    <link rel="stylesheet" href="index.css?v=INDEX_CSS_HASH">
+    <link rel="stylesheet" href="index.css">
   </head>
   <body>
     <svg id="clock" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
@@ -63,6 +63,9 @@
       <label for="enable-wake-lock">Keep screen on:</label>
       <input type="checkbox" id="enable-wake-lock">
     </p>
-    <script type="module" src="index.js"></script>
+    <script>
+      window.INITIAL_SERVER_TIME = {{INITIAL_SERVER_TIME}};
+    </script>
+    <script type="module" src="index.ts"></script>
   </body>
 </html>

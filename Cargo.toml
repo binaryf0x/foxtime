@@ -7,9 +7,9 @@ license = "MIT"
 
 [dependencies]
 actix-web = { version = "*", features = ["rustls-0_23"] }
+actix-web-rust-embed-responder = "*"
 clap = { version = "*", features = ["derive"] }
-lazy_static = "*"
 mime = "*"
+rust-embed-for-web = "*"
 rustls = "*"
 rustls-pemfile = "*"
-sha256 = "*"

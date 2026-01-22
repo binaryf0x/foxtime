@@ -1,10 +1,19 @@
-let timeOrigin = INITIAL_SERVER_TIME - performance.now();
+declare global {
+  interface Window {
+    INITIAL_SERVER_TIME: number;
+  }
+}
 
-const worker = new Worker('worker.js?v=WORKER_JS_HASH', { type: 'module' });
+type SVGElementInHTML = HTMLElement & SVGSVGElement;
+type GElementInHTML = HTMLElement & SVGGElement;
+
+let timeOrigin = window.INITIAL_SERVER_TIME - performance.now();
+
+const worker = new Worker(new URL('./worker.js', import.meta.url));
 worker.postMessage({timeOrigin: performance.timeOrigin});
-worker.onmessage = (event) => {
-  document.getElementById('delay').textContent = event.data.delay.toFixed(2);
-  document.getElementById('offset').textContent = event.data.offset;
+worker.onmessage = (event: MessageEvent) => {
+  (document.getElementById('delay') as HTMLElement).textContent = event.data.delay.toFixed(2);
+  (document.getElementById('offset') as HTMLElement).textContent = event.data.offset;
   timeOrigin = performance.timeOrigin - event.data.timeOriginOffset;
 }
 
@@ -12,14 +21,18 @@ const clockEmoji = ['🕛', '🕧', '🕐', '🕜', '🕑', '🕝', '🕒', '�
   '🕓', '🕟', '🕔', '🕠', '🕕', '🕡', '🕖', '🕣', '🕗', '🕢', '🕘',
   '🕤', '🕙', '🕥', '🕚', '🕦'];
 
-const clock = document.getElementById('clock');
+const clock = document.getElementById('clock') as SVGElementInHTML;
+const hourHand = document.getElementById('hour-hand') as GElementInHTML;
+const minuteHand = document.getElementById('minute-hand') as GElementInHTML;
+const secondHand = document.getElementById('second-hand') as GElementInHTML;
+
 const hourTransform = clock.createSVGTransform();
-document.getElementById('hour-hand').transform.baseVal.initialize(hourTransform);
+hourHand.transform.baseVal.initialize(hourTransform);
 const minuteTransform = clock.createSVGTransform();
-document.getElementById('minute-hand').transform.baseVal.initialize(minuteTransform);
+minuteHand.transform.baseVal.initialize(minuteTransform);
 const secondTransform = clock.createSVGTransform();
-document.getElementById('second-hand').transform.baseVal.initialize(secondTransform);
-const time = document.getElementById('time');
+secondHand.transform.baseVal.initialize(secondTransform);
+const time = document.getElementById('time') as HTMLElement;
 
 function updateTime() {
   const now = new Date(performance.now() + timeOrigin);
@@ -53,9 +66,9 @@ document.onvisibilitychange = () => {
 };
 
 if (navigator.wakeLock?.request) {
-  document.getElementById('wake-lock').style.display = 'flex';
-  const toggle = document.getElementById('enable-wake-lock');
-  let wakeLock = null;
+  (document.getElementById('wake-lock') as HTMLElement).style.display = 'flex';
+  const toggle = document.getElementById('enable-wake-lock') as HTMLInputElement;
+  let wakeLock: WakeLockSentinel | null = null;
   toggle.addEventListener('change', async () => {
     if (toggle.checked && !wakeLock) {
       toggle.disabled = true;

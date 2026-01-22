@@ -3,13 +3,13 @@ const kShortDelay = 1000;
 const kLongDelay = 60000;
 const kSocketTimeout = 10000;
 const timeUrl = '/.well-known/time';
-let timeoutId = 0;
-let delays = [];
-let timeOrigins = [];
+let timeoutId: number | undefined;
+let delays: number[] = [];
+let timeOrigins: number[] = [];
 let lastRequest = performance.now();
 let hidden = false;
 
-function average(array) {
+function average(array: number[]) {
   return array.reduce((a, b) => a + b, 0) / array.length;
 }
 
@@ -33,7 +33,7 @@ async function detectOffset() {
 
     if (!response.ok) {
       console.error(`Server returned error: ${response.status}`);
-      timeoutId = setTimeout(detectOffset, kShortDelay);
+      timeoutId = self.setTimeout(detectOffset, kShortDelay);
       return;
     }
 
@@ -65,16 +65,16 @@ async function detectOffset() {
     const delay = average(delays);
     const timeOrigin = average(timeOrigins);
     const timeOriginOffset = performance.timeOrigin - timeOrigin;
-    const offset = new Date() - new Date(performance.now() + timeOrigin);
+    const offset: number = Date.now() - new Date(performance.now() + timeOrigin).getTime();
 
     postMessage({delay, timeOriginOffset, offset});
   } catch (e) {
     console.error('Failed to request time from server.', e);
-    timeoutId = setTimeout(detectOffset, kShortDelay);
+    timeoutId = self.setTimeout(detectOffset, kShortDelay);
     return;
   }
 
-  timeoutId = setTimeout(
+  timeoutId = self.setTimeout(
       detectOffset, timeOrigins.length < kNumSamples ? kShortDelay : kLongDelay);
 }
 
@@ -89,8 +89,8 @@ self.onmessage = (event) => {
     }
   } else if (!timeoutId) {
     console.log('Resuming measurements.');
-    timeoutId = setTimeout(detectOffset, kShortDelay);
+    timeoutId = self.setTimeout(detectOffset, kShortDelay);
   }
 };
 
-timeoutId = setTimeout(detectOffset, kShortDelay);
+timeoutId = self.setTimeout(detectOffset, kShortDelay);
