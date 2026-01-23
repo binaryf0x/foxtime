@@ -12,7 +12,7 @@ jobs:
   build-and-push-image:
     strategy:
       matrix:
-        runner: ["ubuntu-latest", "ubuntu-latest-arm64"]
+        runner: ["ubuntu-24.04", "ubuntu-24.04-arm"]
     runs-on: ${{ matrix.runner }}
 
     permissions:
