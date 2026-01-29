@@ -1,0 +1,16 @@
+{
+    "short_name": "FoxTime",
+    "name": "FoxTime",
+    "icons": [
+        {
+            "src": "icons-1024.png",
+            "type": "image/png",
+            "sizes": "1024x1024",
+            "purpose": "any"
+        }
+    ],
+    "start_url": "../",
+    "display": "standalone",
+    "scope": "../",
+    "id": "../"
+}
