@@ -34,17 +34,25 @@ const secondTransform = clock.createSVGTransform();
 secondHand.transform.baseVal.initialize(secondTransform);
 const time = document.getElementById('time') as HTMLElement;
 
+let lastTime = '??:??:??.?';
+let lastTitle = "🦊🕒";
+
 function updateTime() {
   const now = new Date(performance.now() + timeOrigin);
   const hours = now.getHours().toString().padStart(2, '0');
   const minutes = now.getMinutes().toString().padStart(2, '0');
   const seconds = now.getSeconds().toString().padStart(2, '0');
   const tenths = Math.floor(now.getMilliseconds() / 100).toString();
-  time.textContent = `${hours}:${minutes}:${seconds}.${tenths}`;
+  const newTime = `${hours}:${minutes}:${seconds}.${tenths}`;
+  if (newTime !== lastTime) {
+    time.textContent = lastTime = newTime;
+  }
 
   const emojiIndex = (now.getHours() % 12) * 2 + Math.floor(now.getMinutes() / 30);
-  const emoji = clockEmoji[emojiIndex];
-  document.title = `🦊${emoji}`;
+  const newTitle = `🦊${clockEmoji[emojiIndex]}`;
+  if (newTitle !== lastTitle) {
+    document.title = lastTitle = newTitle;
+  }
 
   let total = 1000;
   let accumulator = now.getSeconds() * total + now.getMilliseconds();
