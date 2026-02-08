@@ -44,12 +44,20 @@ const fullscreenCheckbox = document.getElementById('fullscreen') as HTMLInputEle
 const timezoneSelect = document.getElementById('timezone') as HTMLSelectElement;
 
 if (typeof Intl.supportedValuesOf === 'function') {
-  for (const tz of Intl.supportedValuesOf('timeZone')) {
+  const timeZones = Intl.supportedValuesOf('timeZone');
+  // Workaround for inconsistent implementations across Javascript engines.
+  // https://github.com/tc39/ecma402/issues/778
+  if (!('UTC' in timeZones)) {
+    timeZones.push('UTC');
+    timeZones.sort();
+  }
+  for (const tz of timeZones) {
     const option = document.createElement('option');
     option.value = tz;
     option.textContent = tz;
     timezoneSelect.appendChild(option);
   }
+  timezoneSelect.value = Temporal.Now.timeZoneId();
 }
 
 function updateUrl() {
@@ -68,7 +76,7 @@ function updateUrl() {
     }
   }
 
-  if (timezoneSelect.value !== 'auto') {
+  if (timezoneSelect.value !== Temporal.Now.timeZoneId()) {
     params.set('tz', timezoneSelect.value);
   } else {
     params.delete('tz');
@@ -79,12 +87,6 @@ function updateUrl() {
   if (window.location.search !== (newSearch ? '?' + newSearch : '')) {
     window.history.replaceState({}, '', newUrl);
   }
-}
-
-function getTimeZone() {
-  const zero = Temporal.Instant.fromEpochMilliseconds(0);
-  const timezone = timezoneSelect.value === 'auto' ? Temporal.Now.timeZoneId() : timezoneSelect.value;
-  return zero.toZonedDateTimeISO(timezone);
 }
 
 function syncSettings() {
@@ -103,7 +105,7 @@ function syncSettings() {
   } else {
     status.classList.add('hidden');
   }
-  currentTimeZone = getTimeZone();
+  currentTimeZone = Temporal.Instant.fromEpochMilliseconds(0).toZonedDateTimeISO(timezoneSelect.value);
   updateUrl();
 }
 
@@ -125,7 +127,7 @@ if (tzParam) {
 
 let lastTime = '??:??:??.?';
 let lastTitle = "🦊🕒";
-let currentTimeZone = getTimeZone();
+let currentTimeZone = Temporal.Instant.fromEpochMilliseconds(0).toZonedDateTimeISO(timezoneSelect.value);
 
 syncSettings();
 
