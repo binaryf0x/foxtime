@@ -32,9 +32,68 @@ const minuteTransform = clock.createSVGTransform();
 minuteHand.transform.baseVal.initialize(minuteTransform);
 const secondTransform = clock.createSVGTransform();
 secondHand.transform.baseVal.initialize(secondTransform);
+
 const time = document.getElementById('time') as HTMLElement;
+const status = document.getElementById('status') as HTMLElement;
 const showAnalogCheckbox = document.getElementById('show-analog') as HTMLInputElement;
 const showDigitalCheckbox = document.getElementById('show-digital') as HTMLInputElement;
+const showStatsCheckbox = document.getElementById('show-stats') as HTMLInputElement;
+const fullscreenCheckbox = document.getElementById('fullscreen') as HTMLInputElement;
+
+function updateUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const settings = [
+    { id: 'analog', checkbox: showAnalogCheckbox },
+    { id: 'digital', checkbox: showDigitalCheckbox },
+    { id: 'stats', checkbox: showStatsCheckbox },
+  ];
+
+  for (const { id, checkbox } of settings) {
+    if (checkbox.checked) {
+      params.delete(id);
+    } else {
+      params.set(id, '0');
+    }
+  }
+
+  const newSearch = params.toString();
+  const newUrl = window.location.pathname + (newSearch ? '?' + newSearch : '');
+  if (window.location.search !== (newSearch ? '?' + newSearch : '')) {
+    window.history.replaceState({}, '', newUrl);
+  }
+}
+
+function syncSettings() {
+  if (showAnalogCheckbox.checked) {
+    clock.classList.remove('hidden');
+  } else {
+    clock.classList.add('hidden');
+  }
+  if (showDigitalCheckbox.checked) {
+    time.classList.remove('hidden');
+  } else {
+    time.classList.add('hidden');
+  }
+  if (showStatsCheckbox.checked) {
+    status.classList.remove('hidden');
+  } else {
+    status.classList.add('hidden');
+  }
+  updateUrl();
+}
+
+// Initial load
+const params = new URLSearchParams(window.location.search);
+if (params.get('analog') === '0') {
+  showAnalogCheckbox.checked = false;
+}
+if (params.get('digital') === '0') {
+  showDigitalCheckbox.checked = false;
+}
+if (params.get('stats') === '0') {
+  showStatsCheckbox.checked = false;
+}
+syncSettings();
 
 let lastTime = '??:??:??.?';
 let lastTitle = "🦊🕒";
@@ -121,31 +180,9 @@ settingsDialog.addEventListener('click', (event) => {
   }
 });
 
-showAnalogCheckbox.addEventListener('change', () => {
-  if (showAnalogCheckbox.checked) {
-    clock.classList.remove('hidden');
-  } else {
-    clock.classList.add('hidden');
-  }
-});
-
-showDigitalCheckbox.addEventListener('change', () => {
-  if (showDigitalCheckbox.checked) {
-    time.classList.remove('hidden');
-  } else {
-    time.classList.add('hidden');
-  }
-});
-
-const showStatsCheckbox = document.getElementById('show-stats') as HTMLInputElement;
-showStatsCheckbox.addEventListener('change', () => {
-  const status = document.getElementById('status') as HTMLElement;
-  if (showStatsCheckbox.checked) {
-    status.classList.remove('hidden');
-  } else {
-    status.classList.add('hidden');
-  }
-});
+showAnalogCheckbox.addEventListener('change', syncSettings);
+showDigitalCheckbox.addEventListener('change', syncSettings);
+showStatsCheckbox.addEventListener('change', syncSettings);
 
 document.addEventListener('keydown', (event) => {
   if (event.key === 'f') {
@@ -159,7 +196,6 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
-const fullscreenCheckbox = document.getElementById('fullscreen') as HTMLInputElement;
 if (document.fullscreenElement) {
   fullscreenCheckbox.checked = true;
 }
