@@ -1,19 +1,22 @@
-html, body {
+html, body, #content {
   width: 100%;
   height: 100%;
 }
 body {
+  margin: 0;
+}
+#content {
   display: grid;
   grid-template-rows: auto min-content;
-  grid-template-columns: repeat(2, 1fr);
-  margin: 0;
 }
 #clock {
   aspect-ratio: 1 / 1;
   width: 100%;
   height: 100%;
   place-self: center;
-  grid-area: 1 / 1 / 1 / 3;
+}
+#clock.hidden {
+  display: none;
 }
 #second-hand {
   will-change: transform;
@@ -29,21 +32,38 @@ body {
   font-size: 15vw;
   margin: 0;
   place-self: center;
-  grid-area: 2 / 1 / 2 / 3;
+}
+#time.hidden {
+  display: none;
 }
 #status {
+  position: absolute;
   font-family: sans-serif;
   margin: 8px;
-  place-self: start;
-  grid-area: 1 / 1 / 1 / 1;
 }
-#wake-lock {
+#status.hidden {
+  display: none;
+}
+#settings-dialog {
+  padding: 20px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  background-color: white;
+  color: black;
   font-family: sans-serif;
-  margin: 8px;
-  align-items: center;
-  justify-self: end;
-  align-self: start;
-  grid-area: 1 / 1 / 2 / 3;
+}
+#settings-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+#settings-dialog h2 {
+  margin-top: 0;
+}
+@media (prefers-color-scheme: dark) {
+  #settings-dialog {
+    background-color: #333;
+    color: white;
+    border-color: #555;
+  }
 }
 svg g.numerals text {
   text-anchor: middle;

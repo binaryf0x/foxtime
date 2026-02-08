@@ -9,61 +9,84 @@
     <link rel="manifest" href="manifest.webmanifest">
   </head>
   <body>
-    <svg id="clock" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="50" cy="50" r="49" fill="none" stroke-width="1" />
-      <g id="hour-marks" stroke-width="1">
-        <line x1="50" y1="3" x2="50" y2="8" stroke-width="2" />
-        <line x1="50" y1="3" x2="50" y2="6" transform="rotate(6, 50, 50)" />
-        <line x1="50" y1="3" x2="50" y2="6" transform="rotate(12, 50, 50)" />
-        <line x1="50" y1="3" x2="50" y2="6" transform="rotate(18, 50, 50)" />
-        <line x1="50" y1="3" x2="50" y2="6" transform="rotate(24, 50, 50)" />
-      </g>
-      <use href="#hour-marks" transform="rotate(30, 50, 50)" />
-      <use href="#hour-marks" transform="rotate(60, 50, 50)" />
-      <use href="#hour-marks" transform="rotate(90, 50, 50)" />
-      <use href="#hour-marks" transform="rotate(120, 50, 50)" />
-      <use href="#hour-marks" transform="rotate(150, 50, 50)" />
-      <use href="#hour-marks" transform="rotate(180, 50, 50)" />
-      <use href="#hour-marks" transform="rotate(210, 50, 50)" />
-      <use href="#hour-marks" transform="rotate(240, 50, 50)" />
-      <use href="#hour-marks" transform="rotate(270, 50, 50)" />
-      <use href="#hour-marks" transform="rotate(300, 50, 50)" />
-      <use href="#hour-marks" transform="rotate(330, 50, 50)" />
-      <g class="numerals">
-        <text transform="translate(50, 16)">12</text>
-        <text transform="rotate(30, 50, 50), translate(50, 15), rotate(-30)">1</text>
-        <text transform="rotate(60, 50, 50), translate(50, 15), rotate(-60)">2</text>
-        <text transform="rotate(90, 50, 50), translate(50, 15), rotate(-90)">3</text>
-        <text transform="rotate(120, 50, 50), translate(50, 15), rotate(-120)">4</text>
-        <text transform="rotate(150, 50, 50), translate(50, 15), rotate(-150)">5</text>
-        <text transform="rotate(180, 50, 50), translate(50, 15), rotate(-180)">6</text>
-        <text transform="rotate(210, 50, 50), translate(50, 15), rotate(-210)">7</text>
-        <text transform="rotate(240, 50, 50), translate(50, 15), rotate(-240)">8</text>
-        <text transform="rotate(270, 50, 50), translate(50, 15), rotate(-270)">9</text>
-        <text transform="rotate(300, 50, 50), translate(50, 15), rotate(-300)">10</text>
-        <text transform="rotate(330, 50, 50), translate(50, 15), rotate(-330)">11</text>
-      </g>
-      <g id="hour-hand">
-        <line x1="50" y1="25" x2="50" y2="50" stroke-width="1" />
-        <circle cx="50" cy="50" r="3" />
-      </g>
-      <g id="minute-hand">
-        <line x1="50" y1="12.5" x2="50" y2="50" stroke-width="1" />
-      </g>
-      <g id="second-hand" fill="red" stroke="red">
-        <line x1="50" y1="5" x2="50" y2="50" stroke-width="0.5" />
-        <circle cx="50" cy="50" r="1.5" />
-      </g>
-    </svg>
-    <p id="time">??:??:??.?</p>
-    <p id="status">
-      RTT: <span id="delay">?</span>ms<br>
-      Offset: <span id="offset">?</span>ms<br>
-    </p>
-    <p id="wake-lock" style="display: none">
-      <label for="enable-wake-lock">Keep screen on:</label>
-      <input type="checkbox" id="enable-wake-lock">
-    </p>
+    <div id="content">
+      <svg id="clock" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="50" cy="50" r="49" fill="none" stroke-width="1" />
+        <g id="hour-marks" stroke-width="1">
+          <line x1="50" y1="3" x2="50" y2="8" stroke-width="2" />
+          <line x1="50" y1="3" x2="50" y2="6" transform="rotate(6, 50, 50)" />
+          <line x1="50" y1="3" x2="50" y2="6" transform="rotate(12, 50, 50)" />
+          <line x1="50" y1="3" x2="50" y2="6" transform="rotate(18, 50, 50)" />
+          <line x1="50" y1="3" x2="50" y2="6" transform="rotate(24, 50, 50)" />
+        </g>
+        <use href="#hour-marks" transform="rotate(30, 50, 50)" />
+        <use href="#hour-marks" transform="rotate(60, 50, 50)" />
+        <use href="#hour-marks" transform="rotate(90, 50, 50)" />
+        <use href="#hour-marks" transform="rotate(120, 50, 50)" />
+        <use href="#hour-marks" transform="rotate(150, 50, 50)" />
+        <use href="#hour-marks" transform="rotate(180, 50, 50)" />
+        <use href="#hour-marks" transform="rotate(210, 50, 50)" />
+        <use href="#hour-marks" transform="rotate(240, 50, 50)" />
+        <use href="#hour-marks" transform="rotate(270, 50, 50)" />
+        <use href="#hour-marks" transform="rotate(300, 50, 50)" />
+        <use href="#hour-marks" transform="rotate(330, 50, 50)" />
+        <g class="numerals">
+          <text transform="translate(50, 16)">12</text>
+          <text transform="rotate(30, 50, 50), translate(50, 15), rotate(-30)">1</text>
+          <text transform="rotate(60, 50, 50), translate(50, 15), rotate(-60)">2</text>
+          <text transform="rotate(90, 50, 50), translate(50, 15), rotate(-90)">3</text>
+          <text transform="rotate(120, 50, 50), translate(50, 15), rotate(-120)">4</text>
+          <text transform="rotate(150, 50, 50), translate(50, 15), rotate(-150)">5</text>
+          <text transform="rotate(180, 50, 50), translate(50, 15), rotate(-180)">6</text>
+          <text transform="rotate(210, 50, 50), translate(50, 15), rotate(-210)">7</text>
+          <text transform="rotate(240, 50, 50), translate(50, 15), rotate(-240)">8</text>
+          <text transform="rotate(270, 50, 50), translate(50, 15), rotate(-270)">9</text>
+          <text transform="rotate(300, 50, 50), translate(50, 15), rotate(-300)">10</text>
+          <text transform="rotate(330, 50, 50), translate(50, 15), rotate(-330)">11</text>
+        </g>
+        <g id="hour-hand">
+          <line x1="50" y1="25" x2="50" y2="50" stroke-width="1" />
+          <circle cx="50" cy="50" r="3" />
+        </g>
+        <g id="minute-hand">
+          <line x1="50" y1="12.5" x2="50" y2="50" stroke-width="1" />
+        </g>
+        <g id="second-hand" fill="red" stroke="red">
+          <line x1="50" y1="5" x2="50" y2="50" stroke-width="0.5" />
+          <circle cx="50" cy="50" r="1.5" />
+        </g>
+      </svg>
+      <p id="time">??:??:??.?</p>
+      <p id="status">
+        RTT: <span id="delay">?</span>ms<br>
+        Offset: <span id="offset">?</span>ms<br>
+      </p>
+    </div>
+    <dialog id="settings-dialog">
+      <h2>Settings</h2>
+      <label>
+        <input type="checkbox" id="fullscreen">
+        Fullscreen
+      </label><br>
+      <label>
+        <input type="checkbox" id="show-analog" checked>
+        Show Analog Clock
+      </label><br>
+      <label>
+        <input type="checkbox" id="show-digital" checked>
+        Show Digital Time
+      </label><br>
+      <label>
+        <input type="checkbox" id="show-stats" checked>
+        Show Statistics
+      </label><br>
+      <div id="wake-lock">
+        <label>
+          <input type="checkbox" id="enable-wake-lock">
+          Keep screen on
+        </label>
+      </div>
+    </dialog>
     <script>
       window.INITIAL_SERVER_TIME = {{INITIAL_SERVER_TIME}};
     </script>

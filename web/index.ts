@@ -74,7 +74,6 @@ document.onvisibilitychange = () => {
 };
 
 if (navigator.wakeLock?.request) {
-  (document.getElementById('wake-lock') as HTMLElement).style.display = 'flex';
   const toggle = document.getElementById('enable-wake-lock') as HTMLInputElement;
   let wakeLock: WakeLockSentinel | null = null;
   toggle.addEventListener('change', async () => {
@@ -96,15 +95,76 @@ if (navigator.wakeLock?.request) {
       wakeLock = null;
     }
   });
+} else {
+  document.getElementById('enable-wake-lock')?.remove();
 }
 
-function toggleFullscreen() {
-  if (document.fullscreenElement) {
-    document.exitFullscreen();
+const pageContent = document.getElementById('content') as HTMLElement;
+const settingsDialog = document.getElementById('settings-dialog') as HTMLDialogElement;
+pageContent.addEventListener('click', () => {
+  if (settingsDialog.open) {
+    settingsDialog.close();
   } else {
-    document.documentElement.requestFullscreen();
+    settingsDialog.showModal();
   }
-}
+});
+settingsDialog.addEventListener('click', (event) => {
+  if (event.target === settingsDialog) {
+    settingsDialog.close();
+  }
+});
 
-clock.addEventListener('click', toggleFullscreen);
-time.addEventListener('click', toggleFullscreen);
+const showAnalogCheckbox = document.getElementById('show-analog') as HTMLInputElement;
+showAnalogCheckbox.addEventListener('change', () => {
+  if (showAnalogCheckbox.checked) {
+    clock.classList.remove('hidden');
+  } else {
+    clock.classList.add('hidden');
+  }
+});
+
+const showDigitalCheckbox = document.getElementById('show-digital') as HTMLInputElement;
+showDigitalCheckbox.addEventListener('change', () => {
+  if (showDigitalCheckbox.checked) {
+    time.classList.remove('hidden');
+  } else {
+    time.classList.add('hidden');
+  }
+});
+
+const showStatsCheckbox = document.getElementById('show-stats') as HTMLInputElement;
+showStatsCheckbox.addEventListener('change', () => {
+  const status = document.getElementById('status') as HTMLElement;
+  if (showStatsCheckbox.checked) {
+    status.classList.remove('hidden');
+  } else {
+    status.classList.add('hidden');
+  }
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'f') {
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      document.documentElement.requestFullscreen();
+    }
+  } else if (event.key === 's') {
+    settingsDialog.showModal();
+  }
+});
+
+const fullscreenCheckbox = document.getElementById('fullscreen') as HTMLInputElement;
+if (document.fullscreenElement) {
+  fullscreenCheckbox.checked = true;
+}
+fullscreenCheckbox.addEventListener('change', () => {
+  if (fullscreenCheckbox.checked) {
+    document.documentElement.requestFullscreen();
+  } else {
+    document.exitFullscreen();
+  }
+});
+document.addEventListener('fullscreenchange', () => {
+  fullscreenCheckbox.checked = !!document.fullscreenElement;
+});
