@@ -17,6 +17,6 @@
     "vite-plugin-checker": "^0.12.0"
   },
   "dependencies": {
-    "@js-temporal/polyfill": "^0.5.1"
+    "temporal-polyfill": "^0.3.0"
   }
 }
