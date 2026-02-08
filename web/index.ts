@@ -33,19 +33,24 @@ minuteHand.transform.baseVal.initialize(minuteTransform);
 const secondTransform = clock.createSVGTransform();
 secondHand.transform.baseVal.initialize(secondTransform);
 const time = document.getElementById('time') as HTMLElement;
+const showAnalogCheckbox = document.getElementById('show-analog') as HTMLInputElement;
+const showDigitalCheckbox = document.getElementById('show-digital') as HTMLInputElement;
 
 let lastTime = '??:??:??.?';
 let lastTitle = "🦊🕒";
 
 function updateTime() {
   const now = new Date(performance.now() + timeOrigin);
-  const hours = now.getHours().toString().padStart(2, '0');
-  const minutes = now.getMinutes().toString().padStart(2, '0');
-  const seconds = now.getSeconds().toString().padStart(2, '0');
-  const tenths = Math.floor(now.getMilliseconds() / 100).toString();
-  const newTime = `${hours}:${minutes}:${seconds}.${tenths}`;
-  if (newTime !== lastTime) {
-    time.textContent = lastTime = newTime;
+
+  if (showDigitalCheckbox.checked) {
+    const hours = now.getHours().toString().padStart(2, '0');
+    const minutes = now.getMinutes().toString().padStart(2, '0');
+    const seconds = now.getSeconds().toString().padStart(2, '0');
+    const tenths = Math.floor(now.getMilliseconds() / 100).toString();
+    const newTime = `${hours}:${minutes}:${seconds}.${tenths}`;
+    if (newTime !== lastTime) {
+      time.textContent = lastTime = newTime;
+    }
   }
 
   const emojiIndex = (now.getHours() % 12) * 2 + Math.floor(now.getMinutes() / 30);
@@ -54,16 +59,18 @@ function updateTime() {
     document.title = lastTitle = newTitle;
   }
 
-  let total = 1000;
-  let accumulator = now.getSeconds() * total + now.getMilliseconds();
-  total *= 60;
-  secondTransform.setRotate((accumulator * 360) / total, 50, 50);
-  accumulator += now.getMinutes() * total;
-  total *= 60;
-  minuteTransform.setRotate((accumulator * 360) / total, 50, 50);
-  accumulator += now.getHours() * total;
-  total *= 12;
-  hourTransform.setRotate((accumulator * 360) / total, 50, 50);
+  if (showAnalogCheckbox.checked) {
+    let total = 1000;
+    let accumulator = now.getSeconds() * total + now.getMilliseconds();
+    total *= 60;
+    secondTransform.setRotate((accumulator * 360) / total, 50, 50);
+    accumulator += now.getMinutes() * total;
+    total *= 60;
+    minuteTransform.setRotate((accumulator * 360) / total, 50, 50);
+    accumulator += now.getHours() * total;
+    total *= 12;
+    hourTransform.setRotate((accumulator * 360) / total, 50, 50);
+  }
 
   requestAnimationFrame(updateTime);
 }
@@ -114,7 +121,6 @@ settingsDialog.addEventListener('click', (event) => {
   }
 });
 
-const showAnalogCheckbox = document.getElementById('show-analog') as HTMLInputElement;
 showAnalogCheckbox.addEventListener('change', () => {
   if (showAnalogCheckbox.checked) {
     clock.classList.remove('hidden');
@@ -123,7 +129,6 @@ showAnalogCheckbox.addEventListener('change', () => {
   }
 });
 
-const showDigitalCheckbox = document.getElementById('show-digital') as HTMLInputElement;
 showDigitalCheckbox.addEventListener('change', () => {
   if (showDigitalCheckbox.checked) {
     time.classList.remove('hidden');
