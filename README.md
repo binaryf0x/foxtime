@@ -44,4 +44,23 @@ Prints help text.
 
 Prints the application version.
 
+## Building
+
+The frontend component is located in the `web` directory and must be built first
+using npm:
+
+```sh
+$ npm install
+$ npm run build
+```
+
+The backend component can now be built with Cargo:
+
+```sh
+$ cargo build
+```
+
+When built in debug mode the frontend components are served live from the `dist`
+directory. When built in release mode they are included in the binary.
+
 [Time over HTTPS Specification]: https://phk.freebsd.dk/time/20151129/
