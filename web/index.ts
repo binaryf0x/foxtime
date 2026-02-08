@@ -1,3 +1,5 @@
+import { Temporal } from '@js-temporal/polyfill';
+
 declare global {
   interface Window {
     INITIAL_SERVER_TIME: number;
@@ -39,6 +41,16 @@ const showAnalogCheckbox = document.getElementById('show-analog') as HTMLInputEl
 const showDigitalCheckbox = document.getElementById('show-digital') as HTMLInputElement;
 const showStatsCheckbox = document.getElementById('show-stats') as HTMLInputElement;
 const fullscreenCheckbox = document.getElementById('fullscreen') as HTMLInputElement;
+const timezoneSelect = document.getElementById('timezone') as HTMLSelectElement;
+
+if (typeof Intl.supportedValuesOf === 'function') {
+  for (const tz of Intl.supportedValuesOf('timeZone')) {
+    const option = document.createElement('option');
+    option.value = tz;
+    option.textContent = tz;
+    timezoneSelect.appendChild(option);
+  }
+}
 
 function updateUrl() {
   const params = new URLSearchParams(window.location.search);
@@ -56,11 +68,23 @@ function updateUrl() {
     }
   }
 
+  if (timezoneSelect.value !== 'auto') {
+    params.set('tz', timezoneSelect.value);
+  } else {
+    params.delete('tz');
+  }
+
   const newSearch = params.toString();
   const newUrl = window.location.pathname + (newSearch ? '?' + newSearch : '');
   if (window.location.search !== (newSearch ? '?' + newSearch : '')) {
     window.history.replaceState({}, '', newUrl);
   }
+}
+
+function getTimeZone() {
+  const zero = Temporal.Instant.fromEpochMilliseconds(0);
+  const timezone = timezoneSelect.value === 'auto' ? Temporal.Now.timeZoneId() : timezoneSelect.value;
+  return zero.toZonedDateTimeISO(timezone);
 }
 
 function syncSettings() {
@@ -79,6 +103,7 @@ function syncSettings() {
   } else {
     status.classList.add('hidden');
   }
+  currentTimeZone = getTimeZone();
   updateUrl();
 }
 
@@ -93,26 +118,33 @@ if (params.get('digital') === '0') {
 if (params.get('stats') === '0') {
   showStatsCheckbox.checked = false;
 }
-syncSettings();
+const tzParam = params.get('tz');
+if (tzParam) {
+  timezoneSelect.value = tzParam;
+}
 
 let lastTime = '??:??:??.?';
 let lastTitle = "🦊🕒";
+let currentTimeZone = getTimeZone();
+
+syncSettings();
 
 function updateTime() {
-  const now = new Date(performance.now() + timeOrigin);
+  const nowInstant = Temporal.Instant.fromEpochMilliseconds(Math.round(performance.now() + timeOrigin));
+  const zonedDateTime = nowInstant.toZonedDateTimeISO(currentTimeZone);
 
   if (showDigitalCheckbox.checked) {
-    const hours = now.getHours().toString().padStart(2, '0');
-    const minutes = now.getMinutes().toString().padStart(2, '0');
-    const seconds = now.getSeconds().toString().padStart(2, '0');
-    const tenths = Math.floor(now.getMilliseconds() / 100).toString();
-    const newTime = `${hours}:${minutes}:${seconds}.${tenths}`;
+    const hoursStr = zonedDateTime.hour.toString().padStart(2, '0');
+    const minutesStr = zonedDateTime.minute.toString().padStart(2, '0');
+    const secondsStr = zonedDateTime.second.toString().padStart(2, '0');
+    const tenths = Math.floor(zonedDateTime.millisecond / 100).toString();
+    const newTime = `${hoursStr}:${minutesStr}:${secondsStr}.${tenths}`;
     if (newTime !== lastTime) {
       time.textContent = lastTime = newTime;
     }
   }
 
-  const emojiIndex = (now.getHours() % 12) * 2 + Math.floor(now.getMinutes() / 30);
+  const emojiIndex = (zonedDateTime.hour % 12) * 2 + Math.floor(zonedDateTime.minute / 30);
   const newTitle = `🦊${clockEmoji[emojiIndex]}`;
   if (newTitle !== lastTitle) {
     document.title = lastTitle = newTitle;
@@ -120,13 +152,13 @@ function updateTime() {
 
   if (showAnalogCheckbox.checked) {
     let total = 1000;
-    let accumulator = now.getSeconds() * total + now.getMilliseconds();
+    let accumulator = zonedDateTime.second * total + zonedDateTime.millisecond;
     total *= 60;
     secondTransform.setRotate((accumulator * 360) / total, 50, 50);
-    accumulator += now.getMinutes() * total;
+    accumulator += zonedDateTime.minute * total;
     total *= 60;
     minuteTransform.setRotate((accumulator * 360) / total, 50, 50);
-    accumulator += now.getHours() * total;
+    accumulator += zonedDateTime.hour * total;
     total *= 12;
     hourTransform.setRotate((accumulator * 360) / total, 50, 50);
   }
@@ -183,6 +215,7 @@ settingsDialog.addEventListener('click', (event) => {
 showAnalogCheckbox.addEventListener('change', syncSettings);
 showDigitalCheckbox.addEventListener('change', syncSettings);
 showStatsCheckbox.addEventListener('change', syncSettings);
+timezoneSelect.addEventListener('change', syncSettings);
 
 document.addEventListener('keydown', (event) => {
   if (event.key === 'f') {
