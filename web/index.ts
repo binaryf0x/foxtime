@@ -47,7 +47,7 @@ if (typeof Intl.supportedValuesOf === 'function') {
   const timeZones = Intl.supportedValuesOf('timeZone');
   // Workaround for inconsistent implementations across Javascript engines.
   // https://github.com/tc39/ecma402/issues/778
-  if (!('UTC' in timeZones)) {
+  if (!timeZones.includes('UTC')) {
     timeZones.push('UTC');
     timeZones.sort();
   }
