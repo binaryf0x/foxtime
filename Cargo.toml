@@ -9,6 +9,7 @@ license = "MIT"
 actix-web = { version = "*", features = ["rustls-0_23"] }
 actix-web-rust-embed-responder = "*"
 clap = { version = "*", features = ["derive"] }
+env_logger = "*"
 mime = "*"
 rust-embed-for-web = "*"
 rustls = "*"

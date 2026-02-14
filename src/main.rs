@@ -76,11 +76,14 @@ async fn static_file(path: web::Path<String>) -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    env_logger::init();
+
     let args = Args::parse();
 
     let mut server = HttpServer::new(|| {
         App::new()
             .wrap(middleware::Compress::default())
+            .wrap(middleware::Logger::default())
             .service(time)
             .service(index)
             .service(static_file)
