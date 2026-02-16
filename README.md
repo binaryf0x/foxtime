@@ -8,11 +8,11 @@ version of the NTP algorithm.
 
 ## Usage
 
-By default the server listens for HTTP connections on 127.0.0.1 port 8123.
+By default the server listens for local HTTP connections on port 8123.
 
-### --host &lt;HOST&gt;
+### --listen-any
 
-Listens for connections by binding to &lt;HOST&gt; instead of 127.0.0.1.
+Listens for connections on all network interfaces instead of only localhost.
 
 ### --port &lt;PORT&gt;
 
@@ -21,20 +21,29 @@ Listens for connections by binding to &lt;PORT&gt; instead of 8123.
 ### --h2c
 
 Enables support for plaintext HTTP/2. Only supported when listening on TCP/IP.
-lis
+
 ### --unix &lt;PATH&gt;
 
 Creates a Unix domain socket at &lt;PATH&gt; to listen for connections.
 
-### --tls_cert
+### --tls-cert
 
 Enables support for HTTPS using the TLS certificate read from a PEM-encoded file
-at &lt;PATH&gt;. Requires `--tls_key`.
+at &lt;PATH&gt;. Requires `--tls-key`.
 
-### --tls_key
+### --tls-key
 
 Enables support for HTTPS using the private key read for a PEM-encoded file at
-&lt;PATH&gt;. Requires `--tls_cert`.
+&lt;PATH&gt;. Requires `--tls-cert`.
+
+### --web-transport
+
+Enables support for WebTransport. Opens an additional UDP socket to listen for
+QUIC connections. Uses port 8123 by default.
+
+### --web-transport-port &lt;PORT&gt;
+
+Listens for QUIC connections on &lt;PORT&gt; instead.
 
 ### -h, --help
 

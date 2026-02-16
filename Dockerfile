@@ -18,4 +18,4 @@ WORKDIR /app
 COPY --from=rust-build /build/target/release/foxtime .
 USER 1000
 EXPOSE 8123
-CMD ["./foxtime", "--host", "0.0.0.0"]
+CMD ["./foxtime", "--listen-any"]

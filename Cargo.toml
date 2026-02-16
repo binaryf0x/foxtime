@@ -14,3 +14,8 @@ mime = "*"
 rust-embed-for-web = "*"
 rustls = "*"
 rustls-pemfile = "*"
+wtransport = "*"
+tokio = { version = "*", features = ["full"] }
+anyhow = "*"
+base64 = "*"
+log = "*"

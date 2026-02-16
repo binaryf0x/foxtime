@@ -3,6 +3,8 @@ import { Temporal } from 'temporal-polyfill';
 declare global {
   interface Window {
     INITIAL_SERVER_TIME: number;
+    WEB_TRANSPORT_PORT: number;
+    WEB_TRANSPORT_CERT: string;
   }
 }
 
@@ -12,7 +14,11 @@ type GElementInHTML = HTMLElement & SVGGElement;
 let timeOrigin = window.INITIAL_SERVER_TIME - performance.now();
 
 const worker = new Worker(new URL('./worker.js', import.meta.url));
-worker.postMessage({timeOrigin: performance.timeOrigin});
+worker.postMessage({
+  timeOrigin: performance.timeOrigin,
+  webTransportPort: window.WEB_TRANSPORT_PORT,
+  webTransportCert: window.WEB_TRANSPORT_CERT,
+});
 worker.onmessage = (event: MessageEvent) => {
   (document.getElementById('delay') as HTMLElement).textContent = event.data.delay.toFixed(2);
   (document.getElementById('offset') as HTMLElement).textContent = event.data.offset;
