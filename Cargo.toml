@@ -2,6 +2,7 @@
 name = "foxtime"
 version = "0.1.0"
 edition = "2024"
+default-run = "foxtime"
 authors = ["binaryfox <binary@foxontheinter.net>"]
 license = "MIT"
 
@@ -16,6 +17,7 @@ rustls = "*"
 rustls-pemfile = "*"
 wtransport = "*"
 tokio = { version = "*", features = ["full"] }
+reqwest = { version = "*", features = ["blocking"] }
 anyhow = "*"
 base64 = "*"
 log = "*"
