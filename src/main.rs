@@ -97,6 +97,12 @@ async fn handle_session(
     incoming_session: wtransport::endpoint::IncomingSession,
 ) -> anyhow::Result<()> {
     let session_request = incoming_session.await?;
+
+    if session_request.path() != "/.well-known/time" {
+        session_request.not_found().await;
+        return Ok(());
+    }
+
     let session = session_request.accept().await?;
 
     log::info!("New session accepted from {}", session.remote_address());
@@ -107,7 +113,7 @@ async fn handle_session(
                 let datagram = datagram?;
                 if datagram.len() >= 8 {
                     let client_ts = &datagram[..8];
-                    let server_ts = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs_f64() * 1_000.0;
+                    let server_ts = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs_f64();
 
                     let mut response = Vec::with_capacity(16);
                     response.extend_from_slice(client_ts);
@@ -209,8 +215,7 @@ async fn main() -> anyhow::Result<()> {
         server = server.bind_uds(unix)?;
     } else if args.h2c {
         server = if args.listen_any {
-            server
-                .bind_auto_h2c((std::net::Ipv6Addr::UNSPECIFIED, args.port))?
+            server.bind_auto_h2c((std::net::Ipv6Addr::UNSPECIFIED, args.port))?
         } else {
             server
                 .bind_auto_h2c((std::net::Ipv4Addr::LOCALHOST, args.port))?
@@ -227,9 +232,7 @@ async fn main() -> anyhow::Result<()> {
         let tls_certs = rustls_pemfile::certs(&mut certs_file)
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
-        let tls_key = rustls_pemfile::private_key(&mut key_file)
-            .unwrap()
-            .unwrap();
+        let tls_key = rustls_pemfile::private_key(&mut key_file).unwrap().unwrap();
 
         let tls_config = rustls::ServerConfig::builder()
             .with_no_client_auth()
@@ -237,17 +240,18 @@ async fn main() -> anyhow::Result<()> {
             .unwrap();
 
         server = if args.listen_any {
-            server
-                .bind_rustls_0_23((std::net::Ipv6Addr::UNSPECIFIED, args.port), tls_config)?
+            server.bind_rustls_0_23((std::net::Ipv6Addr::UNSPECIFIED, args.port), tls_config)?
         } else {
             server
-                .bind_rustls_0_23((std::net::Ipv4Addr::LOCALHOST, args.port), tls_config.clone())?
+                .bind_rustls_0_23(
+                    (std::net::Ipv4Addr::LOCALHOST, args.port),
+                    tls_config.clone(),
+                )?
                 .bind_rustls_0_23((std::net::Ipv6Addr::LOCALHOST, args.port), tls_config)?
         };
     } else {
         server = if args.listen_any {
-            server
-                .bind((std::net::Ipv6Addr::UNSPECIFIED, args.port))?
+            server.bind((std::net::Ipv6Addr::UNSPECIFIED, args.port))?
         } else {
             server
                 .bind((std::net::Ipv4Addr::LOCALHOST, args.port))?

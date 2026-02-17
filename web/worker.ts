@@ -23,7 +23,7 @@ function average(array: number[]) {
 
 
 async function connectWt() {
-  const url = `https://${new URL(self.location.href).hostname}:${webTransportPort}`;
+  const url = `https://${new URL(self.location.href).hostname}:${webTransportPort}/.well-known/time`;
 
   const options: WebTransportOptions = {
     requireUnreliable: true,
@@ -62,7 +62,7 @@ async function handleWtResponses(reader: ReadableStreamDefaultReader<Uint8Array>
 
       const view = new DataView(value.buffer, value.byteOffset, value.byteLength);
       const requestSent = view.getFloat64(0, true);
-      const serverTime = view.getFloat64(8, true);
+      const serverTime = view.getFloat64(8, true) * 1_000;
 
       updateMeasurements(requestSent, responseReceived, serverTime);
     }
