@@ -64,10 +64,11 @@ async function handleWtResponses(reader: ReadableStreamDefaultReader<Uint8Array>
       const requestSent = view.getFloat64(0, true);
       const serverTime = view.getFloat64(8, true) * 1_000;
 
-      updateMeasurements(requestSent, responseReceived, serverTime);
+      updateMeasurements(requestSent, responseReceived, serverTime, 'WebTransport');
     }
   } catch (e) {
     console.error('WebTransport reader error:', e);
+    postMessage({mode: 'Disconnected'});
   } finally {
     try { wt?.close(); } catch {}
     wt = undefined;
@@ -113,10 +114,10 @@ async function measureHttp() {
   }
 
   const serverTime = Number(response.headers.get('x-httpstime')) * 1_000;
-  updateMeasurements(requestSent, responseReceived, serverTime);
+  updateMeasurements(requestSent, responseReceived, serverTime, 'Fetch');
 }
 
-function updateMeasurements(requestSent: number, responseReceived: number, serverTime: number) {
+function updateMeasurements(requestSent: number, responseReceived: number, serverTime: number, mode: string) {
   if (hidden) {
     lastRequest = responseReceived;
     return;
@@ -150,7 +151,7 @@ function updateMeasurements(requestSent: number, responseReceived: number, serve
   const timeOriginOffset = performance.timeOrigin - timeOrigin;
   const offset: number = Date.now() - new Date(performance.now() + timeOrigin).getTime();
 
-  postMessage({delay, timeOriginOffset, offset});
+  postMessage({delay, timeOriginOffset, offset, mode});
 }
 
 async function detectOffset() {
@@ -168,6 +169,7 @@ async function detectOffset() {
     }
   } catch (e) {
     console.error('Failed to request time from server.', e);
+    postMessage({mode: 'Disconnected'});
     timeoutId = self.setTimeout(detectOffset, kShortDelay);
     return;
   }

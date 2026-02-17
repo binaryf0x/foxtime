@@ -13,6 +13,10 @@ type GElementInHTML = HTMLElement & SVGGElement;
 
 let timeOrigin = window.INITIAL_SERVER_TIME - performance.now();
 
+const delayDisplay = document.getElementById('delay') as HTMLElement;
+const offsetDisplay = document.getElementById('offset') as HTMLElement;
+const modeDisplay = document.getElementById('mode') as HTMLElement;
+
 const worker = new Worker(new URL('./worker.js', import.meta.url));
 worker.postMessage({
   timeOrigin: performance.timeOrigin,
@@ -20,9 +24,18 @@ worker.postMessage({
   webTransportCert: window.WEB_TRANSPORT_CERT,
 });
 worker.onmessage = (event: MessageEvent) => {
-  (document.getElementById('delay') as HTMLElement).textContent = event.data.delay.toFixed(2);
-  (document.getElementById('offset') as HTMLElement).textContent = event.data.offset;
-  timeOrigin = performance.timeOrigin - event.data.timeOriginOffset;
+  if (event.data.delay !== undefined) {
+    delayDisplay.textContent = event.data.delay.toFixed(2);
+  }
+  if (event.data.offset !== undefined) {
+    offsetDisplay.textContent = event.data.offset;
+  }
+  if (event.data.mode !== undefined) {
+    modeDisplay.textContent = event.data.mode;
+  }
+  if (event.data.timeOriginOffset !== undefined) {
+    timeOrigin = performance.timeOrigin - event.data.timeOriginOffset;
+  }
 }
 
 const clockEmoji = ['🕛', '🕧', '🕐', '🕜', '🕑', '🕝', '🕒', '🕞',
