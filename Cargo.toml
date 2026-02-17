@@ -19,3 +19,4 @@ tokio = { version = "*", features = ["full"] }
 anyhow = "*"
 base64 = "*"
 log = "*"
+privdrop = "*"

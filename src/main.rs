@@ -3,6 +3,7 @@ use actix_web::{
 };
 use actix_web_rust_embed_responder::IntoResponse;
 use clap::Parser;
+use privdrop::PrivDrop;
 use rust_embed_for_web::EmbedableFile;
 use rust_embed_for_web::RustEmbed;
 use std::{fs::File, io::BufReader, time::SystemTime, time::UNIX_EPOCH};
@@ -33,6 +34,15 @@ struct Args {
 
     #[arg(long, default_value_t = 8123)]
     web_transport_port: u16,
+
+    #[arg(long)]
+    user: Option<String>,
+
+    #[arg(long)]
+    group: Option<String>,
+
+    #[arg(long)]
+    chroot: Option<String>,
 }
 
 #[derive(RustEmbed)]
@@ -132,9 +142,9 @@ async fn handle_session(
     Ok(())
 }
 
-async fn run_webtransport(config: wtransport::ServerConfig) -> anyhow::Result<()> {
-    let endpoint = wtransport::Endpoint::server(config)?;
-
+async fn run_webtransport(
+    endpoint: wtransport::Endpoint<wtransport::endpoint::endpoint_side::Server>,
+) -> anyhow::Result<()> {
     loop {
         let incoming_session = endpoint.accept().await;
         tokio::spawn(async move {
@@ -151,7 +161,7 @@ async fn main() -> anyhow::Result<()> {
 
     let args = Args::parse();
 
-    let wt_data = if args.web_transport {
+    let (wt_data, wt_endpoint) = if args.web_transport {
         let (identity, is_self_signed) =
             if let (Some(cert_path), Some(key_path)) = (&args.tls_cert, &args.tls_key) {
                 (
@@ -186,18 +196,17 @@ async fn main() -> anyhow::Result<()> {
             .with_identity(identity)
             .build();
 
-        tokio::spawn(async move {
-            if let Err(e) = run_webtransport(config).await {
-                log::error!("WebTransport server error: {:?}", e);
-            }
-        });
+        let endpoint = wtransport::Endpoint::server(config)?;
 
-        Some(WebTransportData {
-            port: args.web_transport_port,
-            cert_hash,
-        })
+        (
+            Some(WebTransportData {
+                port: args.web_transport_port,
+                cert_hash,
+            }),
+            Some(endpoint),
+        )
     } else {
-        None
+        (None, None)
     };
 
     let wt_data = web::Data::new(wt_data);
@@ -257,6 +266,28 @@ async fn main() -> anyhow::Result<()> {
                 .bind((std::net::Ipv4Addr::LOCALHOST, args.port))?
                 .bind((std::net::Ipv6Addr::LOCALHOST, args.port))?
         };
+    }
+
+    if args.user.is_some() || args.group.is_some() || args.chroot.is_some() {
+        let mut pd = PrivDrop::default();
+        if let Some(user) = &args.user {
+            pd = pd.user(user);
+        }
+        if let Some(group) = &args.group {
+            pd = pd.group(group);
+        }
+        if let Some(chroot) = &args.chroot {
+            pd = pd.chroot(chroot);
+        }
+        pd.apply()?;
+    }
+
+    if let Some(endpoint) = wt_endpoint {
+        tokio::spawn(async move {
+            if let Err(e) = run_webtransport(endpoint).await {
+                log::error!("WebTransport server error: {:?}", e);
+            }
+        });
     }
 
     server.run().await?;
