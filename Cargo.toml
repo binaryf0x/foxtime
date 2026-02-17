@@ -20,4 +20,4 @@ anyhow = "*"
 base64 = "*"
 log = "*"
 privdrop = "*"
-nix = { version = "0.31.1", features = ["user", "fs"] }
+nix = { version = "*", features = ["user", "fs"] }
