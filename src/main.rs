@@ -2,10 +2,10 @@ use actix_web::{
     App, HttpResponse, HttpServer, Responder, get, http::header, middleware, route, web,
 };
 use actix_web_rust_embed_responder::IntoResponse;
+use anyhow::{Context, Result};
 use clap::Parser;
 use privdrop::PrivDrop;
-use rust_embed_for_web::EmbedableFile;
-use rust_embed_for_web::RustEmbed;
+use rust_embed_for_web::{EmbedableFile, RustEmbed};
 use std::{fs::File, io::BufReader, time::SystemTime, time::UNIX_EPOCH};
 
 #[derive(Parser, Debug)]
@@ -22,6 +22,15 @@ struct Args {
 
     #[arg(long)]
     unix: Option<String>,
+
+    #[arg(long, requires = "unix")]
+    unix_owner: Option<String>,
+
+    #[arg(long, requires = "unix")]
+    unix_group: Option<String>,
+
+    #[arg(long, requires = "unix", value_parser = parse_octal)]
+    unix_mode: Option<u32>,
 
     #[arg(long, requires = "tls_key")]
     tls_cert: Option<String>,
@@ -43,6 +52,10 @@ struct Args {
 
     #[arg(long)]
     chroot: Option<String>,
+}
+
+fn parse_octal(s: &str) -> Result<u32, String> {
+    u32::from_str_radix(s, 8).map_err(|e| e.to_string())
 }
 
 #[derive(RustEmbed)]
@@ -220,8 +233,43 @@ async fn main() -> anyhow::Result<()> {
             .service(static_file)
     });
 
-    if let Some(unix) = args.unix {
+    if let Some(unix) = &args.unix {
         server = server.bind_uds(unix)?;
+
+        if args.unix_owner.is_some() || args.unix_group.is_some() {
+            let user = args
+                .unix_owner
+                .map(|user| {
+                    nix::unistd::User::from_name(&user)
+                        .context("Look up user")
+                        .and_then(|uid| {
+                            uid.ok_or_else(|| anyhow::anyhow!("User not found: {}", user))
+                        })
+                })
+                .transpose()?;
+            let group = args
+                .unix_group
+                .map(|group| {
+                    nix::unistd::Group::from_name(&group)
+                        .context("Look up group")
+                        .and_then(|gid| {
+                            gid.ok_or_else(|| anyhow::anyhow!("Group not found: {}", group))
+                        })
+                })
+                .transpose()?;
+
+            nix::unistd::chown(
+                unix.as_str(),
+                user.map(|user| user.uid),
+                group.map(|group| group.gid),
+            )?;
+        }
+
+        if let Some(mode) = args.unix_mode {
+            use std::os::unix::fs::PermissionsExt;
+            let permissions = std::fs::Permissions::from_mode(mode);
+            std::fs::set_permissions(unix, permissions)?;
+        }
     } else if args.h2c {
         server = if args.listen_any {
             server.bind_auto_h2c((std::net::Ipv6Addr::UNSPECIFIED, args.port))?

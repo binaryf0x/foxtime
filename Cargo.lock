@@ -816,6 +816,7 @@ dependencies = [
  "env_logger",
  "log",
  "mime",
+ "nix 0.31.1",
  "privdrop",
  "rust-embed-for-web",
  "rustls",
@@ -1182,9 +1183,9 @@ checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 
 [[package]]
 name = "libc"
-version = "0.2.182"
+version = "0.2.180"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6800badb6cb2082ffd7b6a67e6125bb39f18782f793520caee8cb8846be06112"
+checksum = "bcc35a38544a891a5f7c865aca548a982ccb3b8650a5b06d0fd33a10283c56fc"
 
 [[package]]
 name = "libredox"
@@ -1295,6 +1296,18 @@ name = "nix"
 version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74523f3a35e05aba87a1d978330aef40f67b0304ac79c1c00b294c9830543db6"
+dependencies = [
+ "bitflags",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
+name = "nix"
+version = "0.31.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "225e7cfe711e0ba79a68baeddb2982723e4235247aefce1482f2f16c27865b66"
 dependencies = [
  "bitflags",
  "cfg-if",
@@ -1482,7 +1495,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "70722a5a3728c9603c8d9469b64b8d1ee54dae6d74e24146da7f501b4c76540f"
 dependencies = [
  "libc",
- "nix",
+ "nix 0.30.1",
 ]
 
 [[package]]
