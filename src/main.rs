@@ -20,13 +20,13 @@ struct Args {
     #[arg(long, conflicts_with = "unix", default_value_t = false)]
     h2c: bool,
 
-    #[arg(long, conflicts_with = "tls_cert", conflicts_with = "tls_key")]
+    #[arg(long)]
     unix: Option<String>,
 
-    #[arg(long, requires = "tls_key", conflicts_with = "h2c")]
+    #[arg(long, requires = "tls_key")]
     tls_cert: Option<String>,
 
-    #[arg(long, requires = "tls_cert", conflicts_with = "h2c")]
+    #[arg(long, requires = "tls_cert")]
     tls_key: Option<String>,
 
     #[arg(long, default_value_t = false)]
