@@ -17,7 +17,7 @@ rustls = "*"
 rustls-pemfile = "*"
 wtransport = "*"
 tokio = { version = "*", features = ["full"] }
-reqwest = { version = "*", features = ["blocking"] }
+reqwest = "*"
 anyhow = "*"
 base64 = "*"
 log = "*"
