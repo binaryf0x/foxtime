@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use base64::Engine;
 use clap::Parser;
+use futures_util::{SinkExt, StreamExt};
+use reqwest_websocket::Upgrade;
 use std::time::{SystemTime, UNIX_EPOCH};
 use wtransport::tls::Sha256Digest;
 use wtransport::{ClientConfig, Endpoint};
@@ -15,6 +17,10 @@ struct Args {
     #[arg(long)]
     web_transport: bool,
 
+    /// Use WebSocket instead of HTTP
+    #[arg(long)]
+    web_socket: bool,
+
     /// WebTransport server certificate SHA-256 fingerprint (base64)
     #[arg(long)]
     cert_hash: Option<String>,
@@ -26,6 +32,8 @@ async fn main() -> Result<()> {
 
     if args.web_transport {
         run_web_transport(&args).await?;
+    } else if args.web_socket {
+        run_web_socket(&args).await?;
     } else {
         run_http(&args).await?;
     }
@@ -83,6 +91,69 @@ async fn run_http(args: &Args) -> Result<()> {
     let server_time_secs: f64 = server_time_str
         .parse()
         .context("Failed to parse server time as float")?;
+
+    print_results(&url, server_time_secs, t1, t2);
+
+    Ok(())
+}
+
+async fn run_web_socket(args: &Args) -> Result<()> {
+    let mut url = args.url.clone();
+    if !url.starts_with("ws://") && !url.starts_with("wss://") {
+        if let Some(host_port) = url.strip_prefix("http://") {
+            url = format!("ws://{}", host_port);
+        } else if let Some(host_port) = url.strip_prefix("https://") {
+            url = format!("wss://{}", host_port);
+        } else {
+            url = format!("ws://{}", url);
+        }
+    }
+
+    if !url.ends_with("/.well-known/time-ws") {
+        url = format!("{}/.well-known/time-ws", url.trim_end_matches('/'));
+    }
+
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()?;
+
+    let response = client
+        .get(&url)
+        .upgrade()
+        .send()
+        .await
+        .with_context(|| format!("Failed to connect to {}", url))?;
+
+    let mut websocket = response.into_websocket().await?;
+
+    let t1 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("Local clock is before epoch")?
+        .as_secs_f64();
+
+    websocket
+        .send(reqwest_websocket::Message::Binary(vec![0].into()))
+        .await?;
+
+    let message = websocket
+        .next()
+        .await
+        .context("WebSocket closed before receiving response")??;
+
+    let t2 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .context("Local clock is before epoch")?
+        .as_secs_f64();
+
+    let server_time_secs = match message {
+        reqwest_websocket::Message::Binary(bin) => {
+            if bin.len() < 8 {
+                anyhow::bail!("Server response too short: {} bytes", bin.len());
+            }
+            f64::from_le_bytes(bin[..8].try_into().unwrap())
+        }
+        _ => anyhow::bail!("Unexpected WebSocket message type"),
+    };
 
     print_results(&url, server_time_secs, t1, t2);
 
