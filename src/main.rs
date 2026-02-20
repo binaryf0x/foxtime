@@ -1,9 +1,12 @@
 use actix_web::{
-    App, HttpResponse, HttpServer, Responder, get, http::header, middleware, route, web,
+    App, HttpRequest, HttpResponse, HttpServer, Responder, get, http::header, middleware, route,
+    rt, web,
 };
 use actix_web_rust_embed_responder::IntoResponse;
+use actix_ws::{CloseCode, CloseReason};
 use anyhow::{Context, Result};
 use clap::Parser;
+use futures_util::StreamExt;
 use privdrop::PrivDrop;
 use rust_embed_for_web::{EmbedableFile, RustEmbed};
 use std::{fs::File, io::BufReader, time::SystemTime, time::UNIX_EPOCH};
@@ -107,6 +110,42 @@ async fn time() -> impl Responder {
     }
 }
 
+#[get("/.well-known/time-ws")]
+async fn time_ws(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, actix_web::Error> {
+    let (res, mut session, mut msg_stream) = actix_ws::handle(&req, stream)?;
+
+    rt::spawn(async move {
+        while let Some(Ok(msg)) = msg_stream.next().await {
+            match msg {
+                actix_ws::Message::Binary(_bin) => {
+                    match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
+                        Ok(timestamp) => {
+                            let server_ts = timestamp.as_secs_f64();
+                            let _ = session.binary(server_ts.to_le_bytes().to_vec()).await;
+                        }
+                        _ => {
+                            let _ = session
+                                .close(Some(CloseReason::from(CloseCode::Error)))
+                                .await;
+                            break;
+                        }
+                    }
+                }
+                actix_ws::Message::Ping(bytes) => {
+                    let _ = session.pong(&bytes).await;
+                }
+                actix_ws::Message::Close(reason) => {
+                    let _ = session.close(reason).await;
+                    break;
+                }
+                _ => (),
+            }
+        }
+    });
+
+    Ok(res)
+}
+
 #[get("/{path:.*}")]
 async fn static_file(path: web::Path<String>) -> impl Responder {
     Asset::get(path.as_str())
@@ -121,7 +160,7 @@ async fn handle_session(
 ) -> anyhow::Result<()> {
     let session_request = incoming_session.await?;
 
-    if session_request.path() != "/.well-known/time" {
+    if session_request.path() != "/.well-known/time-wt" {
         session_request.not_found().await;
         return Ok(());
     }
@@ -229,6 +268,7 @@ async fn main() -> anyhow::Result<()> {
             .app_data(wt_data.clone())
             .wrap(middleware::Logger::default())
             .service(time)
+            .service(time_ws)
             .service(index)
             .service(static_file)
     });

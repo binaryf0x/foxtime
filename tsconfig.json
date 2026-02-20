@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
-    "target": "ES2023",
+    "target": "ES2024",
     "useDefineForClassFields": true,
     "module": "ES2022",
-    "lib": ["ES2023", "DOM", "webworker"],
+    "lib": ["ES2024", "DOM", "webworker"],
     "moduleResolution": "Node",
     "strict": true,
     "sourceMap": true,

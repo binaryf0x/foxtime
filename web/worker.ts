@@ -3,6 +3,7 @@ const kShortDelay = 1000;
 const kLongDelay = 60000;
 const kSocketTimeout = 10000;
 const timeUrl = '/.well-known/time';
+const wsUrl = (self.location.protocol === 'https:' ? 'wss://' : 'ws://') + self.location.host + '/.well-known/time-ws';
 
 let webTransportPort: number | undefined;
 let webTransportCert: string | undefined;
@@ -17,13 +18,15 @@ let hidden = false;
 let wt: WebTransport | undefined;
 let wtWriter: WritableStreamDefaultWriter<BufferSource> | undefined;
 
+// WebSocket state
+let ws: WebSocket | undefined;
+
 function average(array: number[]) {
   return array.reduce((a, b) => a + b, 0) / array.length;
 }
 
-
 async function connectWt() {
-  const url = `https://${new URL(self.location.href).hostname}:${webTransportPort}/.well-known/time`;
+  const url = `https://${new URL(self.location.href).hostname}:${webTransportPort}/.well-known/time-wt`;
 
   const options: WebTransportOptions = {
     requireUnreliable: true,
@@ -98,6 +101,54 @@ async function sendWtRequest() {
   }
 }
 
+async function connectWs(): Promise<void> {
+  ws = new WebSocket(wsUrl);
+  ws.binaryType = 'arraybuffer';
+
+  let {promise, resolve, reject} = Promise.withResolvers();
+  ws.onopen = () => {
+    console.log(`Connected to ${wsUrl}.`);
+    resolve(undefined);
+  };
+  ws.onerror = (e) => {
+    ws = undefined;
+    reject(e);
+  };
+  await promise;
+}
+
+async function measureWs(): Promise<void> {
+  if (!ws) {
+    await connectWs();
+  }
+
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    ws = undefined;
+    throw new Error('WebSocket not open');
+  }
+
+  let requestSent = performance.now();
+  ws.send(new Uint8Array(0));
+
+  let {promise, resolve, reject} = Promise.withResolvers();
+  ws.onmessage = (event) => {
+    const responseReceived = performance.now();
+    const view = new DataView(event.data);
+    const serverTime = view.getFloat64(0, true) * 1_000;
+    updateMeasurements(requestSent, responseReceived, serverTime, 'WebSocket');
+    resolve(undefined);
+  };
+  ws.onclose = () => {
+    ws = undefined;
+    reject(new Error('WebSocket closed'));
+  };
+  ws.onerror = (e) => {
+    ws = undefined;
+    reject(e);
+  }
+  await promise;
+}
+
 async function measureHttp() {
   if (performance.now() - lastRequest > kSocketTimeout) {
     try {
@@ -162,10 +213,18 @@ async function detectOffset() {
       try {
         await sendWtRequest();
       } catch (e) {
-        await measureHttp();
+        try {
+          await measureWs();
+        } catch (e) {
+          await measureHttp();
+        }
       }
     } else {
-      await measureHttp();
+      try {
+        await measureWs();
+      } catch (e) {
+        await measureHttp();
+      }
     }
   } catch (e) {
     console.error('Failed to request time from server.', e);

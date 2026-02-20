@@ -99,8 +99,8 @@ async fn run_web_transport(args: &Args) -> Result<()> {
         }
     }
 
-    if !url.ends_with("/.well-known/time") {
-        url = format!("{}/.well-known/time", url.trim_end_matches('/'));
+    if !url.ends_with("/.well-known/time-wt") {
+        url = format!("{}/.well-known/time-wt", url.trim_end_matches('/'));
     }
 
     let builder =

@@ -16,6 +16,8 @@ rust-embed-for-web = "*"
 rustls = "*"
 rustls-pemfile = "*"
 wtransport = "*"
+actix-ws = "*"
+futures-util = "*"
 tokio = { version = "*", features = ["full"] }
 reqwest = "*"
 anyhow = "*"
