@@ -19,7 +19,6 @@ const modeDisplay = document.getElementById('mode') as HTMLElement;
 
 const worker = new Worker(new URL('./worker.js', import.meta.url));
 worker.postMessage({
-  timeOrigin: performance.timeOrigin,
   webTransportPort: window.WEB_TRANSPORT_PORT,
   webTransportCert: window.WEB_TRANSPORT_CERT,
 });

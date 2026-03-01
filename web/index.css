@@ -27,11 +27,25 @@ body {
 #hour-hand {
   will-change: transform;
 }
+#time-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  place-self: center;
+}
 #time {
   font-family: monospace;
   font-size: 15vw;
   margin: 0;
-  place-self: center;
+}
+#days {
+  font-family: sans-serif;
+  font-size: 10vw;
+  margin: 0;
+}
+#days:empty {
+  display: none;
 }
 #time.hidden {
   display: none;

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="color-scheme" content="dark light">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🦊⏳</title>
+    <link rel="stylesheet" href="index.css">
+    <link rel="manifest" href="manifest.webmanifest">
+  </head>
+  <body>
+    <div id="content">
+      <div id="time-container">
+        <p id="days"></p>
+        <p id="time">??:??:??.?</p>
+      </div>
+      <p id="status">
+        Mode: <span id="mode">Disconnected</span><br>
+        RTT: <span id="delay">?</span>ms<br>
+        Offset: <span id="offset">?</span>ms<br>
+      </p>
+    </div>
+    <dialog id="settings-dialog">
+      <h2>Settings</h2>
+      <label>
+        Target Time
+        <input type="datetime-local" id="target-time" step="1">
+      </label><br>
+      <label>
+        Time Zone
+        <select id="timezone">
+        </select>
+      </label><br>
+      <label>
+        <input type="checkbox" id="fullscreen">
+        Fullscreen
+      </label><br>
+      <label>
+        <input type="checkbox" id="show-stats" checked>
+        Show Statistics
+      </label><br>
+      <div id="wake-lock">
+        <label>
+          <input type="checkbox" id="enable-wake-lock">
+          Keep screen on
+        </label>
+      </div>
+    </dialog>
+    <script>
+      window.INITIAL_SERVER_TIME = {{INITIAL_SERVER_TIME}};
+      window.WEB_TRANSPORT_PORT = {{WEB_TRANSPORT_PORT}};
+      window.WEB_TRANSPORT_CERT = "{{WEB_TRANSPORT_CERT}}";
+    </script>
+    <script type="module" src="countdown.ts"></script>
+  </body>
+</html>

@@ -70,11 +70,10 @@ struct WebTransportData {
     cert_hash: String,
 }
 
-#[get("/")]
-async fn index(web_transport: web::Data<Option<WebTransportData>>) -> impl Responder {
-    let index = Asset::get("index.html").unwrap().data();
-    let contents = std::str::from_utf8(index.as_ref()).unwrap();
-
+fn serve_html(
+    contents: &str,
+    web_transport: &Option<WebTransportData>,
+) -> HttpResponse {
     match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
         Ok(timestamp) => {
             // Use as_millis_f64() when available:
@@ -82,7 +81,7 @@ async fn index(web_transport: web::Data<Option<WebTransportData>>) -> impl Respo
             let timestamp_str = (timestamp.as_secs_f64() * 1_000.0).to_string();
             let mut body = contents.replace("{{INITIAL_SERVER_TIME}}", &timestamp_str);
 
-            if let Some(wt) = web_transport.as_ref() {
+            if let Some(wt) = web_transport {
                 body = body.replace("{{WEB_TRANSPORT_PORT}}", &wt.port.to_string());
                 body = body.replace("{{WEB_TRANSPORT_CERT}}", &wt.cert_hash);
             } else {
@@ -98,6 +97,20 @@ async fn index(web_transport: web::Data<Option<WebTransportData>>) -> impl Respo
         }
         _ => HttpResponse::InternalServerError().finish(),
     }
+}
+
+#[get("/")]
+async fn index(web_transport: web::Data<Option<WebTransportData>>) -> impl Responder {
+    let asset = Asset::get("index.html").unwrap().data();
+    let contents = std::str::from_utf8(asset.as_ref()).unwrap();
+    serve_html(contents, &web_transport)
+}
+
+#[get("/countdown")]
+async fn countdown(web_transport: web::Data<Option<WebTransportData>>) -> impl Responder {
+    let asset = Asset::get("countdown.html").unwrap().data();
+    let contents = std::str::from_utf8(asset.as_ref()).unwrap();
+    serve_html(contents, &web_transport)
 }
 
 #[route("/.well-known/time", method = "GET", method = "HEAD")]
@@ -270,6 +283,7 @@ async fn main() -> anyhow::Result<()> {
             .service(time)
             .service(time_ws)
             .service(index)
+            .service(countdown)
             .service(static_file)
     });
 
