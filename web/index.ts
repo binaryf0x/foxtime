@@ -127,7 +127,6 @@ function syncSettings() {
   updateUrl();
 }
 
-// Initial load
 const params = new URLSearchParams(window.location.search);
 if (params.get('analog') === '0') {
   showAnalogCheckbox.checked = false;

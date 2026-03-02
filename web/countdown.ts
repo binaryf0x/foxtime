@@ -8,14 +8,12 @@ declare global {
   }
 }
 
-// State
 let timeOrigin = window.INITIAL_SERVER_TIME - performance.now();
 let targetInstant: Temporal.Instant | null = null;
 let lastTimeText = '';
 let lastDaysText = '';
 let animationFrameId: number | null = null;
 
-// DOM Elements
 const delayDisplay = document.getElementById('delay') as HTMLElement;
 const offsetDisplay = document.getElementById('offset') as HTMLElement;
 const modeDisplay = document.getElementById('mode') as HTMLElement;
@@ -29,7 +27,6 @@ const targetTimeInput = document.getElementById('target-time') as HTMLInputEleme
 const settingsDialog = document.getElementById('settings-dialog') as HTMLDialogElement;
 const pageContent = document.getElementById('content') as HTMLElement;
 
-// Functions
 function updateUrl() {
   const params = new URLSearchParams(window.location.search);
 
@@ -37,12 +34,6 @@ function updateUrl() {
     params.delete('stats');
   } else {
     params.set('stats', '0');
-  }
-
-  if (timezoneSelect.value !== Temporal.Now.timeZoneId()) {
-    params.set('tz', timezoneSelect.value);
-  } else {
-    params.delete('tz');
   }
 
   if (targetInstant) {
@@ -134,7 +125,6 @@ function triggerUpdate() {
   }
 }
 
-// Worker
 const worker = new Worker(new URL('./worker.js', import.meta.url));
 worker.postMessage({
   webTransportPort: window.WEB_TRANSPORT_PORT,
@@ -158,7 +148,6 @@ worker.onmessage = (event: MessageEvent) => {
   }
 }
 
-// Initialization
 if (typeof Intl.supportedValuesOf === 'function') {
   const timeZones = Intl.supportedValuesOf('timeZone');
   if (!timeZones.includes('UTC')) {
@@ -178,10 +167,6 @@ const params = new URLSearchParams(window.location.search);
 if (params.get('stats') === '0') {
   showStatsCheckbox.checked = false;
 }
-const tzParam = params.get('tz');
-if (tzParam) {
-  timezoneSelect.value = tzParam;
-}
 const tParam = params.get('t');
 if (tParam) {
   const t = parseFloat(tParam);
@@ -197,7 +182,6 @@ if (!tParam) {
   settingsDialog.showModal();
 }
 
-// Event Listeners
 pageContent.addEventListener('click', () => {
   if (settingsDialog.open) {
     settingsDialog.close();
