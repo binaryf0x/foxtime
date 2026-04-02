@@ -1,15 +1,18 @@
-use actix_web::{
-    App, HttpRequest, HttpResponse, HttpServer, Responder, get, http::header, middleware, route,
-    rt, web,
-};
-use actix_web_rust_embed_responder::IntoResponse;
-use actix_ws::{CloseCode, CloseReason};
-use anyhow::{Context, Result};
+use std::sync::OnceLock;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use anyhow::Context;
+use base64::Engine;
+use bytes::{Bytes, BytesMut};
 use clap::Parser;
-use futures_util::StreamExt;
 use privdrop::PrivDrop;
-use rust_embed_for_web::{EmbedableFile, RustEmbed};
-use std::{fs::File, io::BufReader, time::SystemTime, time::UNIX_EPOCH};
+use rcgen::{CertificateParams, KeyPair};
+use rust_embed::RustEmbed;
+use salvo::conn::rustls::{Keycert, RustlsConfig};
+use salvo::logging::Logger;
+use salvo::prelude::*;
+use salvo::serve_static::static_embed;
+use salvo::websocket::{Message, WebSocketUpgrade};
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -19,9 +22,6 @@ struct Args {
 
     #[arg(long, conflicts_with = "unix", default_value_t = 8123)]
     port: u16,
-
-    #[arg(long, conflicts_with = "unix", default_value_t = false)]
-    h2c: bool,
 
     #[arg(long)]
     unix: Option<String>,
@@ -65,311 +65,227 @@ fn parse_octal(s: &str) -> Result<u32, String> {
 #[folder = "dist/"]
 struct Asset;
 
-struct WebTransportData {
+#[derive(Debug)]
+struct WebTransportInfo {
     port: u16,
     cert_hash: String,
 }
 
-fn serve_html(
-    contents: &str,
-    web_transport: &Option<WebTransportData>,
-) -> HttpResponse {
-    match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(timestamp) => {
-            // Use as_millis_f64() when available:
-            // https://github.com/rust-lang/rust/issues/122451
-            let timestamp_str = (timestamp.as_secs_f64() * 1_000.0).to_string();
-            let mut body = contents.replace("{{INITIAL_SERVER_TIME}}", &timestamp_str);
+static WT_INFO: OnceLock<Option<WebTransportInfo>> = OnceLock::new();
 
-            if let Some(wt) = web_transport {
-                body = body.replace("{{WEB_TRANSPORT_PORT}}", &wt.port.to_string());
-                body = body.replace("{{WEB_TRANSPORT_CERT}}", &wt.cert_hash);
-            } else {
-                body = body.replace("{{WEB_TRANSPORT_PORT}}", "0");
-                body = body.replace("{{WEB_TRANSPORT_CERT}}", "");
-            }
+fn serve_html(path: &str, res: &mut Response) {
+    let asset = Asset::get(path).unwrap();
+    let contents = std::str::from_utf8(asset.data.as_ref()).unwrap();
 
-            HttpResponse::Ok()
-                .content_type(header::ContentType::html())
-                .insert_header((header::CROSS_ORIGIN_OPENER_POLICY, "same-origin"))
-                .insert_header((header::CROSS_ORIGIN_EMBEDDER_POLICY, "require-corp"))
-                .body(body)
+    let wt = WT_INFO.get().and_then(|o| o.as_ref());
+    let wt_port = wt
+        .map(|w| w.port.to_string())
+        .unwrap_or_else(|| "0".to_string());
+    let wt_cert = wt.map(|w| w.cert_hash.as_str()).unwrap_or("");
+
+    let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(ts) => (ts.as_secs_f64() * 1_000.0).to_string(),
+        Err(_) => {
+            res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
+            return;
         }
-        _ => HttpResponse::InternalServerError().finish(),
+    };
+
+    let body = contents
+        .replace("{{INITIAL_SERVER_TIME}}", &timestamp)
+        .replace("{{WEB_TRANSPORT_PORT}}", &wt_port)
+        .replace("{{WEB_TRANSPORT_CERT}}", wt_cert);
+
+    res.render(Text::Html(body));
+}
+
+#[handler]
+async fn index(res: &mut Response) {
+    serve_html("index.html", res);
+}
+
+#[handler]
+async fn countdown(res: &mut Response) {
+    serve_html("countdown.html", res);
+}
+
+#[handler]
+async fn get_time(res: &mut Response) {
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(ts) => {
+            res.add_header("x-httpstime", ts.as_secs_f64().to_string(), true)
+                .ok();
+        }
+        Err(_) => {
+            res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
+        }
     }
 }
 
-#[get("/")]
-async fn index(web_transport: web::Data<Option<WebTransportData>>) -> impl Responder {
-    let asset = Asset::get("index.html").unwrap().data();
-    let contents = std::str::from_utf8(asset.as_ref()).unwrap();
-    serve_html(contents, &web_transport)
-}
-
-#[get("/countdown")]
-async fn countdown(web_transport: web::Data<Option<WebTransportData>>) -> impl Responder {
-    let asset = Asset::get("countdown.html").unwrap().data();
-    let contents = std::str::from_utf8(asset.as_ref()).unwrap();
-    serve_html(contents, &web_transport)
-}
-
-#[route("/.well-known/time", method = "GET", method = "HEAD")]
-async fn time() -> impl Responder {
-    match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(timestamp) => HttpResponse::Ok()
-            .insert_header(("x-httpstime", timestamp.as_secs_f64().to_string()))
-            .finish(),
-        _ => HttpResponse::InternalServerError().finish(),
-    }
-}
-
-#[get("/.well-known/time-ws")]
-async fn time_ws(req: HttpRequest, stream: web::Payload) -> Result<HttpResponse, actix_web::Error> {
-    let (res, mut session, mut msg_stream) = actix_ws::handle(&req, stream)?;
-
-    rt::spawn(async move {
-        while let Some(Ok(msg)) = msg_stream.next().await {
-            match msg {
-                actix_ws::Message::Binary(_bin) => {
-                    match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-                        Ok(timestamp) => {
-                            let server_ts = timestamp.as_secs_f64();
-                            let _ = session.binary(server_ts.to_le_bytes().to_vec()).await;
+#[handler]
+async fn time_ws(req: &mut Request, res: &mut Response) -> Result<(), StatusError> {
+    WebSocketUpgrade::new()
+        .upgrade(req, res, |mut ws| async move {
+            while let Some(msg) = ws.recv().await {
+                match msg {
+                    Ok(msg) if msg.is_binary() => {
+                        match SystemTime::now().duration_since(UNIX_EPOCH) {
+                            Ok(ts) => {
+                                let server_ts = ts.as_secs_f64();
+                                let mut response = BytesMut::with_capacity(8);
+                                response.extend_from_slice(&server_ts.to_le_bytes());
+                                if ws.send(Message::binary(response.freeze())).await.is_err() {
+                                    break;
+                                }
+                            }
+                            Err(_) => break,
                         }
-                        _ => {
-                            let _ = session
-                                .close(Some(CloseReason::from(CloseCode::Error)))
-                                .await;
+                    }
+                    Ok(msg) if msg.is_ping() => {
+                        if ws
+                            .send(Message::pong(msg.as_bytes().to_vec()))
+                            .await
+                            .is_err()
+                        {
                             break;
                         }
                     }
+                    Ok(msg) if msg.is_close() => break,
+                    Err(_) => break,
+                    _ => {}
                 }
-                actix_ws::Message::Ping(bytes) => {
-                    let _ = session.pong(&bytes).await;
-                }
-                actix_ws::Message::Close(reason) => {
-                    let _ = session.close(reason).await;
-                    break;
-                }
-                _ => (),
             }
+        })
+        .await
+}
+
+#[handler]
+async fn time_wt(req: &mut Request, res: &mut Response) -> Result<(), salvo::Error> {
+    let session = match req.web_transport_mut().await {
+        Ok(session) => session,
+        Err(_) => {
+            res.status_code(StatusCode::BAD_REQUEST);
+            return Ok(());
         }
-    });
+    };
 
-    Ok(res)
-}
-
-#[get("/{path:.*}")]
-async fn static_file(path: web::Path<String>) -> impl Responder {
-    Asset::get(path.as_str())
-        .into_response()
-        .customize()
-        .insert_header((header::CROSS_ORIGIN_OPENER_POLICY, "same-origin"))
-        .insert_header((header::CROSS_ORIGIN_EMBEDDER_POLICY, "require-corp"))
-}
-
-async fn handle_session(
-    incoming_session: wtransport::endpoint::IncomingSession,
-) -> anyhow::Result<()> {
-    let session_request = incoming_session.await?;
-
-    if session_request.path() != "/.well-known/time-wt" {
-        session_request.not_found().await;
-        return Ok(());
-    }
-
-    let session = session_request.accept().await?;
-
-    log::info!("New session accepted from {}", session.remote_address());
+    let mut datagram_reader = session.datagram_reader();
+    let mut datagram_sender = session.datagram_sender();
 
     loop {
         tokio::select! {
-            datagram = session.receive_datagram() => {
-                let datagram = datagram?;
-                if datagram.len() >= 8 {
-                    let client_ts = &datagram[..8];
-                    let server_ts = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs_f64();
-
-                    let mut response = Vec::with_capacity(16);
-                    response.extend_from_slice(client_ts);
-                    response.extend_from_slice(&server_ts.to_le_bytes());
-
-                    session.send_datagram(&response)?;
+            result = datagram_reader.read_datagram() => {
+                match result {
+                    Ok(datagram) => {
+                        let payload: Bytes = datagram.into_payload();
+                        if payload.len() >= 8 {
+                            match SystemTime::now().duration_since(UNIX_EPOCH) {
+                                Ok(ts) => {
+                                    let server_ts = ts.as_secs_f64();
+                                    let mut response = BytesMut::with_capacity(16);
+                                    response.extend_from_slice(&payload[..8]);
+                                    response.extend_from_slice(&server_ts.to_le_bytes());
+                                    if let Err(e) = datagram_sender.send_datagram(response.freeze()) {
+                                        tracing::error!("Failed to send datagram: {e:?}");
+                                        break;
+                                    }
+                                }
+                                Err(_) => break,
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to read datagram: {e:?}");
+                        break;
+                    }
                 }
             }
-            _ = session.closed() => {
-                log::info!("Session closed");
-                break;
-            }
+            else => break,
         }
     }
 
     Ok(())
 }
 
-async fn run_webtransport(
-    endpoint: wtransport::Endpoint<wtransport::endpoint::endpoint_side::Server>,
-) -> anyhow::Result<()> {
-    loop {
-        let incoming_session = endpoint.accept().await;
-        tokio::spawn(async move {
-            if let Err(e) = handle_session(incoming_session).await {
-                log::error!("Session error: {:?}", e);
-            }
-        });
-    }
+#[handler]
+async fn cross_origin_isolation(
+    req: &mut Request,
+    depot: &mut Depot,
+    res: &mut Response,
+    ctrl: &mut FlowCtrl,
+) {
+    ctrl.call_next(req, depot, res).await;
+    res.add_header("cross-origin-opener-policy", "same-origin", true)
+        .ok();
+    res.add_header("cross-origin-embedder-policy", "require-corp", true)
+        .ok();
 }
 
-#[actix_web::main]
-async fn main() -> anyhow::Result<()> {
-    env_logger::init();
-
-    let args = Args::parse();
-
-    let (wt_data, wt_endpoint) = if args.web_transport {
-        let (identity, is_self_signed) =
-            if let (Some(cert_path), Some(key_path)) = (&args.tls_cert, &args.tls_key) {
-                (
-                    wtransport::Identity::load_pemfiles(cert_path, key_path).await?,
-                    false,
-                )
-            } else {
-                (wtransport::Identity::self_signed(["localhost"])?, true)
-            };
-
-        let mut cert_hash = String::new();
-        if is_self_signed {
-            for cert in identity.certificate_chain().as_slice() {
-                use base64::Engine;
-                let hash = base64::engine::general_purpose::STANDARD.encode(cert.hash().as_ref());
-                log::info!("Certificate SHA-256 fingerprint (base64): {}", hash);
-                if cert_hash.is_empty() {
-                    cert_hash = hash;
-                }
-            }
-        }
-
-        let config = wtransport::ServerConfig::builder()
-            .with_bind_config(
-                if args.listen_any {
-                    wtransport::config::IpBindConfig::InAddrAnyDual
-                } else {
-                    wtransport::config::IpBindConfig::LocalDual
-                },
-                args.web_transport_port,
-            )
-            .with_identity(identity)
-            .build();
-
-        let endpoint = wtransport::Endpoint::server(config)?;
-
-        (
-            Some(WebTransportData {
-                port: args.web_transport_port,
-                cert_hash,
-            }),
-            Some(endpoint),
+fn build_router() -> Router {
+    Router::new()
+        .hoop(Logger::new())
+        .hoop(cross_origin_isolation)
+        .get(index)
+        .push(Router::with_path("countdown").get(countdown))
+        .push(
+            Router::with_path(".well-known/time")
+                .get(get_time)
+                .head(get_time),
         )
-    } else {
-        (None, None)
-    };
+        .push(Router::with_path(".well-known/time-ws").goal(time_ws))
+        .push(Router::with_path(".well-known/time-wt").goal(time_wt))
+        .push(Router::with_path("{*path}").get(static_embed::<Asset>()))
+}
 
-    let wt_data = web::Data::new(wt_data);
+fn generate_self_signed() -> anyhow::Result<(String, String, String)> {
+    use ::time::{Duration, OffsetDateTime};
+    use sha2::{Digest, Sha256};
 
-    let mut server = HttpServer::new(move || {
-        App::new()
-            .app_data(wt_data.clone())
-            .wrap(middleware::Logger::default())
-            .service(time)
-            .service(time_ws)
-            .service(index)
-            .service(countdown)
-            .service(static_file)
-    });
+    let key_pair = KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256)?;
+    let now = OffsetDateTime::now_utc();
+    let mut params = CertificateParams::new(vec!["localhost".to_string()])?;
+    params.not_before = now;
+    params.not_after = now + Duration::days(14);
 
-    if let Some(unix) = &args.unix {
-        server = server.bind_uds(unix)?;
+    let cert = params.self_signed(&key_pair)?;
+    let cert_der: &[u8] = cert.der();
+    let cert_hash =
+        base64::engine::general_purpose::STANDARD.encode(Sha256::digest(cert_der).as_slice());
+    tracing::info!("Certificate SHA-256 fingerprint (base64): {}", cert_hash);
 
-        if args.unix_owner.is_some() || args.unix_group.is_some() {
-            let user = args
-                .unix_owner
-                .map(|user| {
-                    nix::unistd::User::from_name(&user)
-                        .context("Look up user")
-                        .and_then(|uid| {
-                            uid.ok_or_else(|| anyhow::anyhow!("User not found: {}", user))
-                        })
-                })
-                .transpose()?;
-            let group = args
-                .unix_group
-                .map(|group| {
-                    nix::unistd::Group::from_name(&group)
-                        .context("Look up group")
-                        .and_then(|gid| {
-                            gid.ok_or_else(|| anyhow::anyhow!("Group not found: {}", group))
-                        })
-                })
-                .transpose()?;
+    Ok((cert.pem(), key_pair.serialize_pem(), cert_hash))
+}
 
-            nix::unistd::chown(
-                unix.as_str(),
-                user.map(|user| user.uid),
-                group.map(|group| group.gid),
-            )?;
-        }
-
-        if let Some(mode) = args.unix_mode {
-            use std::os::unix::fs::PermissionsExt;
-            let permissions = std::fs::Permissions::from_mode(mode);
-            std::fs::set_permissions(unix, permissions)?;
-        }
-    } else if args.h2c {
-        server = if args.listen_any {
-            server.bind_auto_h2c((std::net::Ipv6Addr::UNSPECIFIED, args.port))?
-        } else {
-            server
-                .bind_auto_h2c((std::net::Ipv4Addr::LOCALHOST, args.port))?
-                .bind_auto_h2c((std::net::Ipv6Addr::LOCALHOST, args.port))?
-        };
-    } else if let (Some(cert), Some(key)) = (args.tls_cert, args.tls_key) {
-        rustls::crypto::aws_lc_rs::default_provider()
-            .install_default()
-            .unwrap();
-
-        let mut certs_file = BufReader::new(File::open(cert).unwrap());
-        let mut key_file = BufReader::new(File::open(key).unwrap());
-
-        let tls_certs = rustls_pemfile::certs(&mut certs_file)
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
-        let tls_key = rustls_pemfile::private_key(&mut key_file).unwrap().unwrap();
-
-        let tls_config = rustls::ServerConfig::builder()
-            .with_no_client_auth()
-            .with_single_cert(tls_certs, tls_key)
-            .unwrap();
-
-        server = if args.listen_any {
-            server.bind_rustls_0_23((std::net::Ipv6Addr::UNSPECIFIED, args.port), tls_config)?
-        } else {
-            server
-                .bind_rustls_0_23(
-                    (std::net::Ipv4Addr::LOCALHOST, args.port),
-                    tls_config.clone(),
-                )?
-                .bind_rustls_0_23((std::net::Ipv6Addr::LOCALHOST, args.port), tls_config)?
-        };
-    } else {
-        server = if args.listen_any {
-            server.bind((std::net::Ipv6Addr::UNSPECIFIED, args.port))?
-        } else {
-            server
-                .bind((std::net::Ipv4Addr::LOCALHOST, args.port))?
-                .bind((std::net::Ipv6Addr::LOCALHOST, args.port))?
-        };
+fn set_unix_permissions(unix: &str, args: &Args) -> anyhow::Result<()> {
+    if args.unix_owner.is_some() || args.unix_group.is_some() {
+        let user = args
+            .unix_owner
+            .as_deref()
+            .map(|name| {
+                nix::unistd::User::from_name(name)
+                    .context("Look up user")
+                    .and_then(|u| u.ok_or_else(|| anyhow::anyhow!("User not found: {}", name)))
+            })
+            .transpose()?;
+        let group = args
+            .unix_group
+            .as_deref()
+            .map(|name| {
+                nix::unistd::Group::from_name(name)
+                    .context("Look up group")
+                    .and_then(|g| g.ok_or_else(|| anyhow::anyhow!("Group not found: {}", name)))
+            })
+            .transpose()?;
+        nix::unistd::chown(unix, user.map(|u| u.uid), group.map(|g| g.gid))?;
     }
+    if let Some(mode) = args.unix_mode {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(unix, std::fs::Permissions::from_mode(mode))?;
+    }
+    Ok(())
+}
 
+fn apply_privdrop(args: &Args) -> anyhow::Result<()> {
     if args.user.is_some() || args.group.is_some() || args.chroot.is_some() {
         let mut pd = PrivDrop::default();
         if let Some(user) = &args.user {
@@ -383,16 +299,123 @@ async fn main() -> anyhow::Result<()> {
         }
         pd.apply()?;
     }
+    Ok(())
+}
 
-    if let Some(endpoint) = wt_endpoint {
-        tokio::spawn(async move {
-            if let Err(e) = run_webtransport(endpoint).await {
-                log::error!("WebTransport server error: {:?}", e);
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .ok();
+
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+
+    let args = Args::parse();
+
+    // Build WebTransport QUIC TLS config and collect certificate info for the HTML templates.
+    let (wt_rustls_config, wt_cert_hash) = if args.web_transport {
+        if let (Some(cert_path), Some(key_path)) = (&args.tls_cert, &args.tls_key) {
+            let cert_pem = std::fs::read_to_string(cert_path)?;
+            let key_pem = std::fs::read_to_string(key_path)?;
+            let config = RustlsConfig::new(
+                Keycert::new()
+                    .cert(cert_pem.as_bytes())
+                    .key(key_pem.as_bytes()),
+            );
+            (Some(config), String::new())
+        } else {
+            let (cert_pem, key_pem, cert_hash) = generate_self_signed()?;
+            let config = RustlsConfig::new(
+                Keycert::new()
+                    .cert(cert_pem.as_bytes())
+                    .key(key_pem.as_bytes()),
+            );
+            (Some(config), cert_hash)
+        }
+    } else {
+        (None, String::new())
+    };
+
+    WT_INFO
+        .set(if args.web_transport {
+            Some(WebTransportInfo {
+                port: args.web_transport_port,
+                cert_hash: wt_cert_hash,
+            })
+        } else {
+            None
+        })
+        .expect("WT_INFO already set");
+
+    // Build HTTP TLS config when cert/key are provided (independent of WebTransport).
+    let http_rustls_config: Option<RustlsConfig> =
+        if let (Some(cert_path), Some(key_path)) = (&args.tls_cert, &args.tls_key) {
+            let cert_pem = std::fs::read_to_string(cert_path)?;
+            let key_pem = std::fs::read_to_string(key_path)?;
+            Some(RustlsConfig::new(
+                Keycert::new()
+                    .cert(cert_pem.as_bytes())
+                    .key(key_pem.as_bytes()),
+            ))
+        } else {
+            None
+        };
+
+    let router = build_router();
+
+    // Resolve listen addresses once based on listen_any.
+    let (http_v4, http_v6, q_v4, q_v6) = if args.listen_any {
+        (
+            (std::net::Ipv4Addr::UNSPECIFIED, args.port),
+            (std::net::Ipv6Addr::UNSPECIFIED, args.port),
+            (std::net::Ipv4Addr::UNSPECIFIED, args.web_transport_port),
+            (std::net::Ipv6Addr::UNSPECIFIED, args.web_transport_port),
+        )
+    } else {
+        (
+            (std::net::Ipv4Addr::LOCALHOST, args.port),
+            (std::net::Ipv6Addr::LOCALHOST, args.port),
+            (std::net::Ipv4Addr::LOCALHOST, args.web_transport_port),
+            (std::net::Ipv6Addr::LOCALHOST, args.web_transport_port),
+        )
+    };
+
+    // Build the QUIC listener pair in one place (None when WebTransport is disabled).
+    let quic = wt_rustls_config
+        .map(|c| QuinnListener::new(c.clone(), q_v4).join(QuinnListener::new(c, q_v6)));
+
+    if let Some(unix_path) = args.unix.clone() {
+        // Unix socket for HTTP; optionally join QUIC listeners for WebTransport.
+        set_unix_permissions(&unix_path, &args)?;
+        apply_privdrop(&args)?;
+        let base = UnixListener::new(unix_path);
+        if let Some(q) = quic {
+            Server::new(base.join(q).bind().await).serve(router).await;
+        } else {
+            Server::new(base.bind().await).serve(router).await;
+        }
+    } else {
+        apply_privdrop(&args)?;
+        if let Some(c) = http_rustls_config {
+            let tcp = TcpListener::new(http_v4)
+                .rustls(c.clone())
+                .join(TcpListener::new(http_v6).rustls(c));
+            if let Some(q) = quic {
+                Server::new(tcp.join(q).bind().await).serve(router).await;
+            } else {
+                Server::new(tcp.bind().await).serve(router).await;
             }
-        });
+        } else {
+            let tcp = TcpListener::new(http_v4).join(TcpListener::new(http_v6));
+            if let Some(q) = quic {
+                Server::new(tcp.join(q).bind().await).serve(router).await;
+            } else {
+                Server::new(tcp.bind().await).serve(router).await;
+            }
+        }
     }
-
-    server.run().await?;
 
     Ok(())
 }

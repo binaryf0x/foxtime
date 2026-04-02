@@ -7,22 +7,23 @@ authors = ["binaryfox <binary@foxontheinter.net>"]
 license = "MIT"
 
 [dependencies]
-actix-web = { version = "*", features = ["rustls-0_23"] }
-actix-web-rust-embed-responder = "*"
+salvo = { version = "*", features = ["websocket", "quinn", "rustls", "unix", "serve-static", "logging"] }
 clap = { version = "*", features = ["derive"] }
-env_logger = "*"
-mime = "*"
-rust-embed-for-web = "*"
-rustls = "*"
-rustls-pemfile = "*"
-wtransport = "*"
-actix-ws = "*"
-futures-util = "*"
 tokio = { version = "*", features = ["full"] }
-reqwest = "*"
-reqwest-websocket = "*"
+tracing = "*"
+tracing-subscriber = { version = "*", features = ["env-filter"] }
 anyhow = "*"
 base64 = "*"
-log = "*"
 privdrop = "*"
 nix = { version = "*", features = ["user", "fs"] }
+rust-embed = "*"
+rustls = { version = "*", features = ["ring"] }
+rcgen = { version = "*", features = ["pem"] }
+sha2 = "*"
+time = "*"
+bytes = "*"
+# foxtime-query dependencies
+reqwest = "*"
+reqwest-websocket = "*"
+futures-util = "*"
+wtransport = "*"
