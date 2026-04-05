@@ -11,7 +11,7 @@ WORKDIR /build
 COPY --from=web-build /build/dist ./dist
 COPY Cargo.toml Cargo.lock ./
 COPY ./src ./src
-RUN cargo build --release
+RUN cargo test --release && cargo build --release
 
 FROM debian:stable-slim
 WORKDIR /app

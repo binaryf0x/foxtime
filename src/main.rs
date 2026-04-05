@@ -1,18 +1,15 @@
-use std::sync::OnceLock;
-use std::time::{SystemTime, UNIX_EPOCH};
-
 use anyhow::Context;
-use base64::Engine;
-use bytes::{Bytes, BytesMut};
 use clap::Parser;
 use privdrop::PrivDrop;
-use rcgen::{CertificateParams, KeyPair};
-use rust_embed::RustEmbed;
 use salvo::conn::rustls::{Keycert, RustlsConfig};
-use salvo::logging::Logger;
 use salvo::prelude::*;
-use salvo::serve_static::static_embed;
-use salvo::websocket::{Message, WebSocketUpgrade};
+
+mod assets;
+mod http;
+mod router;
+mod self_signed;
+mod websocket;
+mod webtransport;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -59,201 +56,6 @@ struct Args {
 
 fn parse_octal(s: &str) -> Result<u32, String> {
     u32::from_str_radix(s, 8).map_err(|e| e.to_string())
-}
-
-#[derive(RustEmbed)]
-#[folder = "dist/"]
-struct Asset;
-
-#[derive(Debug)]
-struct WebTransportInfo {
-    port: u16,
-    cert_hash: String,
-}
-
-static WT_INFO: OnceLock<Option<WebTransportInfo>> = OnceLock::new();
-
-fn serve_html(path: &str, res: &mut Response) {
-    let asset = Asset::get(path).unwrap();
-    let contents = std::str::from_utf8(asset.data.as_ref()).unwrap();
-
-    let wt = WT_INFO.get().and_then(|o| o.as_ref());
-    let wt_port = wt
-        .map(|w| w.port.to_string())
-        .unwrap_or_else(|| "0".to_string());
-    let wt_cert = wt.map(|w| w.cert_hash.as_str()).unwrap_or("");
-
-    let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
-        Ok(ts) => (ts.as_secs_f64() * 1_000.0).to_string(),
-        Err(_) => {
-            res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
-            return;
-        }
-    };
-
-    let body = contents
-        .replace("{{INITIAL_SERVER_TIME}}", &timestamp)
-        .replace("{{WEB_TRANSPORT_PORT}}", &wt_port)
-        .replace("{{WEB_TRANSPORT_CERT}}", wt_cert);
-
-    res.render(Text::Html(body));
-}
-
-#[handler]
-async fn index(res: &mut Response) {
-    serve_html("index.html", res);
-}
-
-#[handler]
-async fn countdown(res: &mut Response) {
-    serve_html("countdown.html", res);
-}
-
-#[handler]
-async fn get_time(res: &mut Response) {
-    match SystemTime::now().duration_since(UNIX_EPOCH) {
-        Ok(ts) => {
-            res.add_header("x-httpstime", ts.as_secs_f64().to_string(), true)
-                .ok();
-        }
-        Err(_) => {
-            res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
-        }
-    }
-}
-
-#[handler]
-async fn time_ws(req: &mut Request, res: &mut Response) -> Result<(), StatusError> {
-    WebSocketUpgrade::new()
-        .upgrade(req, res, |mut ws| async move {
-            while let Some(msg) = ws.recv().await {
-                match msg {
-                    Ok(msg) if msg.is_binary() => {
-                        match SystemTime::now().duration_since(UNIX_EPOCH) {
-                            Ok(ts) => {
-                                let server_ts = ts.as_secs_f64();
-                                let mut response = BytesMut::with_capacity(8);
-                                response.extend_from_slice(&server_ts.to_le_bytes());
-                                if ws.send(Message::binary(response.freeze())).await.is_err() {
-                                    break;
-                                }
-                            }
-                            Err(_) => break,
-                        }
-                    }
-                    Ok(msg) if msg.is_ping() => {
-                        if ws
-                            .send(Message::pong(msg.as_bytes().to_vec()))
-                            .await
-                            .is_err()
-                        {
-                            break;
-                        }
-                    }
-                    Ok(msg) if msg.is_close() => break,
-                    Err(_) => break,
-                    _ => {}
-                }
-            }
-        })
-        .await
-}
-
-#[handler]
-async fn time_wt(req: &mut Request, res: &mut Response) -> Result<(), salvo::Error> {
-    let session = match req.web_transport_mut().await {
-        Ok(session) => session,
-        Err(_) => {
-            res.status_code(StatusCode::BAD_REQUEST);
-            return Ok(());
-        }
-    };
-
-    let mut datagram_reader = session.datagram_reader();
-    let mut datagram_sender = session.datagram_sender();
-
-    loop {
-        tokio::select! {
-            result = datagram_reader.read_datagram() => {
-                match result {
-                    Ok(datagram) => {
-                        let payload: Bytes = datagram.into_payload();
-                        if payload.len() >= 8 {
-                            match SystemTime::now().duration_since(UNIX_EPOCH) {
-                                Ok(ts) => {
-                                    let server_ts = ts.as_secs_f64();
-                                    let mut response = BytesMut::with_capacity(16);
-                                    response.extend_from_slice(&payload[..8]);
-                                    response.extend_from_slice(&server_ts.to_le_bytes());
-                                    if let Err(e) = datagram_sender.send_datagram(response.freeze()) {
-                                        tracing::error!("Failed to send datagram: {e:?}");
-                                        break;
-                                    }
-                                }
-                                Err(_) => break,
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        tracing::error!("Failed to read datagram: {e:?}");
-                        break;
-                    }
-                }
-            }
-            else => break,
-        }
-    }
-
-    Ok(())
-}
-
-#[handler]
-async fn cross_origin_isolation(
-    req: &mut Request,
-    depot: &mut Depot,
-    res: &mut Response,
-    ctrl: &mut FlowCtrl,
-) {
-    ctrl.call_next(req, depot, res).await;
-    res.add_header("cross-origin-opener-policy", "same-origin", true)
-        .ok();
-    res.add_header("cross-origin-embedder-policy", "require-corp", true)
-        .ok();
-}
-
-fn build_router() -> Router {
-    Router::new()
-        .hoop(Logger::new())
-        .hoop(cross_origin_isolation)
-        .get(index)
-        .push(Router::with_path("countdown").get(countdown))
-        .push(
-            Router::with_path(".well-known/time")
-                .get(get_time)
-                .head(get_time),
-        )
-        .push(Router::with_path(".well-known/time-ws").goal(time_ws))
-        .push(Router::with_path(".well-known/time-wt").goal(time_wt))
-        .push(Router::with_path("{*path}").get(static_embed::<Asset>()))
-}
-
-fn generate_self_signed() -> anyhow::Result<(String, String, String)> {
-    use ::time::{Duration, OffsetDateTime};
-    use sha2::{Digest, Sha256};
-
-    let key_pair = KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256)?;
-    let now = OffsetDateTime::now_utc();
-    let mut params = CertificateParams::new(vec!["localhost".to_string()])?;
-    params.not_before = now;
-    params.not_after = now + Duration::days(14);
-
-    let cert = params.self_signed(&key_pair)?;
-    let cert_der: &[u8] = cert.der();
-    let cert_hash =
-        base64::engine::general_purpose::STANDARD.encode(Sha256::digest(cert_der).as_slice());
-    tracing::info!("Certificate SHA-256 fingerprint (base64): {}", cert_hash);
-
-    Ok((cert.pem(), key_pair.serialize_pem(), cert_hash))
 }
 
 fn set_unix_permissions(unix: &str, args: &Args) -> anyhow::Result<()> {
@@ -314,56 +116,39 @@ async fn main() -> anyhow::Result<()> {
 
     let args = Args::parse();
 
-    // Build WebTransport QUIC TLS config and collect certificate info for the HTML templates.
+    let rustls_config = if let (Some(cert_path), Some(key_path)) = (&args.tls_cert, &args.tls_key) {
+        let cert_pem = std::fs::read_to_string(cert_path)?;
+        let key_pem = std::fs::read_to_string(key_path)?;
+        Some(RustlsConfig::new(
+            Keycert::new()
+                .cert(cert_pem.as_bytes())
+                .key(key_pem.as_bytes()),
+        ))
+    } else {
+        None
+    };
+
     let (wt_rustls_config, wt_cert_hash) = if args.web_transport {
-        if let (Some(cert_path), Some(key_path)) = (&args.tls_cert, &args.tls_key) {
-            let cert_pem = std::fs::read_to_string(cert_path)?;
-            let key_pem = std::fs::read_to_string(key_path)?;
-            let config = RustlsConfig::new(
-                Keycert::new()
-                    .cert(cert_pem.as_bytes())
-                    .key(key_pem.as_bytes()),
-            );
-            (Some(config), String::new())
+        if let Some(config) = &rustls_config {
+            (Some(config.clone()), String::new())
         } else {
-            let (cert_pem, key_pem, cert_hash) = generate_self_signed()?;
-            let config = RustlsConfig::new(
-                Keycert::new()
-                    .cert(cert_pem.as_bytes())
-                    .key(key_pem.as_bytes()),
-            );
+            let (config, cert_hash) = self_signed::generate()?;
             (Some(config), cert_hash)
         }
     } else {
         (None, String::new())
     };
 
-    WT_INFO
-        .set(if args.web_transport {
-            Some(WebTransportInfo {
-                port: args.web_transport_port,
-                cert_hash: wt_cert_hash,
-            })
-        } else {
-            None
+    assets::set_web_transport_info(if args.web_transport {
+        Some(assets::WebTransportInfo {
+            port: args.web_transport_port,
+            cert_hash: wt_cert_hash,
         })
-        .expect("WT_INFO already set");
+    } else {
+        None
+    });
 
-    // Build HTTP TLS config when cert/key are provided (independent of WebTransport).
-    let http_rustls_config: Option<RustlsConfig> =
-        if let (Some(cert_path), Some(key_path)) = (&args.tls_cert, &args.tls_key) {
-            let cert_pem = std::fs::read_to_string(cert_path)?;
-            let key_pem = std::fs::read_to_string(key_path)?;
-            Some(RustlsConfig::new(
-                Keycert::new()
-                    .cert(cert_pem.as_bytes())
-                    .key(key_pem.as_bytes()),
-            ))
-        } else {
-            None
-        };
-
-    let router = build_router();
+    let router = router::router();
 
     // Resolve listen addresses once based on listen_any.
     let (http_v4, http_v6, q_v4, q_v6) = if args.listen_any {
@@ -398,7 +183,7 @@ async fn main() -> anyhow::Result<()> {
         }
     } else {
         apply_privdrop(&args)?;
-        if let Some(c) = http_rustls_config {
+        if let Some(c) = rustls_config {
             let tcp = TcpListener::new(http_v4)
                 .rustls(c.clone())
                 .join(TcpListener::new(http_v6).rustls(c));
