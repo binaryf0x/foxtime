@@ -2,6 +2,7 @@ use anyhow::Context;
 use clap::Parser;
 use privdrop::PrivDrop;
 use salvo::conn::rustls::{Keycert, RustlsConfig};
+use salvo::conn::{Acceptor, JoinedAcceptor};
 use salvo::prelude::*;
 
 mod assets;
@@ -104,40 +105,60 @@ fn apply_privdrop(args: &Args) -> anyhow::Result<()> {
     Ok(())
 }
 
+// QuinnListener::try_bind() only stores the socket address; the UDP socket is
+// not actually bound until the first QuinnAcceptor::accept() call during
+// serving — which happens after apply_privdrop(). For privileged ports this
+// fails. Work around it by polling accept() once with a zero timeout:
+// Endpoint::server() runs synchronously before the first await point in
+// accept(), so the UDP socket gets bound before the future is cancelled.
+async fn bind_quinn_listener(
+    config: RustlsConfig,
+    addr: std::net::SocketAddr,
+) -> anyhow::Result<impl Acceptor> {
+    let mut acceptor = QuinnListener::new(config, addr).bind().await;
+    match tokio::time::timeout(std::time::Duration::ZERO, acceptor.accept(None)).await {
+        Ok(Err(e)) => return Err(e.into()),
+        _ => {}
+    }
+    Ok(acceptor)
+}
+
+async fn bind_quinn_localhost(config: RustlsConfig, port: u16) -> anyhow::Result<impl Acceptor> {
+    let quic_v4 =
+        bind_quinn_listener(config.clone(), (std::net::Ipv4Addr::LOCALHOST, port).into()).await?;
+    let quic_v6 = bind_quinn_listener(config, (std::net::Ipv6Addr::LOCALHOST, port).into()).await?;
+    Ok(JoinedAcceptor::new(quic_v4, quic_v6))
+}
+
 async fn serve_unix(
     unix_path: String,
     quic_rustls_config: Option<RustlsConfig>,
     args: &Args,
     router: Router,
 ) -> anyhow::Result<()> {
-    let base = UnixListener::new(unix_path.clone());
+    let unix_acceptor = UnixListener::new(unix_path.clone()).bind().await;
+    set_unix_permissions(&unix_path, args)?;
     if let Some(config) = quic_rustls_config {
         if args.listen_any {
-            let quic =
-                QuinnListener::new(config, (std::net::Ipv6Addr::UNSPECIFIED, args.quic_port));
-            let acceptor = base.join(quic).bind().await;
-            set_unix_permissions(&unix_path, args)?;
-            apply_privdrop(args)?;
-            Server::new(acceptor).serve(router).await;
-        } else {
-            let quic = QuinnListener::new(
-                config.clone(),
-                (std::net::Ipv4Addr::LOCALHOST, args.quic_port),
-            )
-            .join(QuinnListener::new(
+            let quic = bind_quinn_listener(
                 config,
-                (std::net::Ipv6Addr::LOCALHOST, args.quic_port),
-            ));
-            let acceptor = base.join(quic).bind().await;
-            set_unix_permissions(&unix_path, args)?;
+                (std::net::Ipv6Addr::UNSPECIFIED, args.quic_port).into(),
+            )
+            .await?;
             apply_privdrop(args)?;
-            Server::new(acceptor).serve(router).await;
+            Server::new(JoinedAcceptor::new(unix_acceptor, quic))
+                .serve(router)
+                .await;
+        } else {
+            let quic = bind_quinn_localhost(config, args.quic_port).await?;
+            apply_privdrop(args)?;
+            Server::new(JoinedAcceptor::new(unix_acceptor, quic))
+                .serve(router)
+                .await;
         }
     } else {
-        let acceptor = base.bind().await;
-        set_unix_permissions(&unix_path, args)?;
         apply_privdrop(args)?;
-        Server::new(acceptor).serve(router).await;
+        Server::new(unix_acceptor).serve(router).await;
     }
     Ok(())
 }
@@ -148,35 +169,34 @@ async fn serve_any(
     args: &Args,
     router: Router,
 ) -> anyhow::Result<()> {
+    // Bind to the IPv6 wildcard (::) which is dual-stack by default on Linux and macOS,
+    // covering both IPv4 and IPv6 clients with a single socket.
     let http_addr = (std::net::Ipv6Addr::UNSPECIFIED, args.port);
     let quic_addr = (std::net::Ipv6Addr::UNSPECIFIED, args.quic_port);
+    let quic = if let Some(config) = quic_rustls_config {
+        Some(bind_quinn_listener(config, quic_addr.into()).await?)
+    } else {
+        None
+    };
     if let Some(config) = rustls_config {
-        let tcp = TcpListener::new(http_addr).rustls(config);
-        if let Some(quic_config) = quic_rustls_config {
-            let acceptor = tcp
-                .join(QuinnListener::new(quic_config, quic_addr))
-                .bind()
+        let tcp = TcpListener::new(http_addr).rustls(config).bind().await;
+        apply_privdrop(args)?;
+        if let Some(quic) = quic {
+            Server::new(JoinedAcceptor::new(tcp, quic))
+                .serve(router)
                 .await;
-            apply_privdrop(args)?;
-            Server::new(acceptor).serve(router).await;
         } else {
-            let acceptor = tcp.bind().await;
-            apply_privdrop(args)?;
-            Server::new(acceptor).serve(router).await;
+            Server::new(tcp).serve(router).await;
         }
     } else {
-        let tcp = TcpListener::new(http_addr);
-        if let Some(quic_config) = quic_rustls_config {
-            let acceptor = tcp
-                .join(QuinnListener::new(quic_config, quic_addr))
-                .bind()
+        let tcp = TcpListener::new(http_addr).bind().await;
+        apply_privdrop(args)?;
+        if let Some(quic) = quic {
+            Server::new(JoinedAcceptor::new(tcp, quic))
+                .serve(router)
                 .await;
-            apply_privdrop(args)?;
-            Server::new(acceptor).serve(router).await;
         } else {
-            let acceptor = tcp.bind().await;
-            apply_privdrop(args)?;
-            Server::new(acceptor).serve(router).await;
+            Server::new(tcp).serve(router).await;
         }
     }
     Ok(())
@@ -190,39 +210,37 @@ async fn serve_localhost(
 ) -> anyhow::Result<()> {
     let http_v4 = (std::net::Ipv4Addr::LOCALHOST, args.port);
     let http_v6 = (std::net::Ipv6Addr::LOCALHOST, args.port);
-    let quic = quic_rustls_config.map(|config| {
-        QuinnListener::new(
-            config.clone(),
-            (std::net::Ipv4Addr::LOCALHOST, args.quic_port),
-        )
-        .join(QuinnListener::new(
-            config,
-            (std::net::Ipv6Addr::LOCALHOST, args.quic_port),
-        ))
-    });
+    let quic = if let Some(config) = quic_rustls_config {
+        Some(bind_quinn_localhost(config, args.quic_port).await?)
+    } else {
+        None
+    };
     if let Some(config) = rustls_config {
         let tcp = TcpListener::new(http_v4)
             .rustls(config.clone())
-            .join(TcpListener::new(http_v6).rustls(config));
+            .join(TcpListener::new(http_v6).rustls(config))
+            .bind()
+            .await;
+        apply_privdrop(args)?;
         if let Some(quic) = quic {
-            let acceptor = tcp.join(quic).bind().await;
-            apply_privdrop(args)?;
-            Server::new(acceptor).serve(router).await;
+            Server::new(JoinedAcceptor::new(tcp, quic))
+                .serve(router)
+                .await;
         } else {
-            let acceptor = tcp.bind().await;
-            apply_privdrop(args)?;
-            Server::new(acceptor).serve(router).await;
+            Server::new(tcp).serve(router).await;
         }
     } else {
-        let tcp = TcpListener::new(http_v4).join(TcpListener::new(http_v6));
+        let tcp = TcpListener::new(http_v4)
+            .join(TcpListener::new(http_v6))
+            .bind()
+            .await;
+        apply_privdrop(args)?;
         if let Some(quic) = quic {
-            let acceptor = tcp.join(quic).bind().await;
-            apply_privdrop(args)?;
-            Server::new(acceptor).serve(router).await;
+            Server::new(JoinedAcceptor::new(tcp, quic))
+                .serve(router)
+                .await;
         } else {
-            let acceptor = tcp.bind().await;
-            apply_privdrop(args)?;
-            Server::new(acceptor).serve(router).await;
+            Server::new(tcp).serve(router).await;
         }
     }
     Ok(())
