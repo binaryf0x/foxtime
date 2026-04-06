@@ -114,7 +114,7 @@ async fn serve_unix(
     if let Some(config) = quic_rustls_config {
         if args.listen_any {
             let quic =
-                QuinnListener::new(config, (std::net::Ipv4Addr::UNSPECIFIED, args.quic_port));
+                QuinnListener::new(config, (std::net::Ipv6Addr::UNSPECIFIED, args.quic_port));
             let acceptor = base.join(quic).bind().await;
             set_unix_permissions(&unix_path, args)?;
             apply_privdrop(args)?;
@@ -148,8 +148,6 @@ async fn serve_any(
     args: &Args,
     router: Router,
 ) -> anyhow::Result<()> {
-    // Bind to the IPv6 wildcard (::) which is dual-stack by default on Linux and macOS,
-    // covering both IPv4 and IPv6 clients with a single socket.
     let http_addr = (std::net::Ipv6Addr::UNSPECIFIED, args.port);
     let quic_addr = (std::net::Ipv6Addr::UNSPECIFIED, args.quic_port);
     if let Some(config) = rustls_config {
