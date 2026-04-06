@@ -11,10 +11,12 @@ async fn cross_origin_isolation(
     ctrl: &mut FlowCtrl,
 ) {
     ctrl.call_next(req, depot, res).await;
-    res.add_header("cross-origin-opener-policy", "same-origin", true)
-        .ok();
-    res.add_header("cross-origin-embedder-policy", "require-corp", true)
-        .ok();
+    if !req.uri().path().starts_with("/.well-known/") {
+        res.add_header("cross-origin-opener-policy", "same-origin", true)
+            .ok();
+        res.add_header("cross-origin-embedder-policy", "require-corp", true)
+            .ok();
+    }
 }
 
 pub(crate) fn router() -> Router {
