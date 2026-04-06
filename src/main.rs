@@ -106,22 +106,22 @@ fn apply_privdrop(args: &Args) -> anyhow::Result<()> {
 
 async fn serve_unix(
     unix_path: String,
-    wt_rustls_config: Option<RustlsConfig>,
-    wt_port: u16,
+    quic_rustls_config: Option<RustlsConfig>,
+    quic_port: u16,
     listen_any: bool,
     router: Router,
 ) {
     let base = UnixListener::new(unix_path);
-    if let Some(config) = wt_rustls_config {
+    if let Some(config) = quic_rustls_config {
         if listen_any {
-            let quic = QuinnListener::new(config, (std::net::Ipv4Addr::UNSPECIFIED, wt_port));
+            let quic = QuinnListener::new(config, (std::net::Ipv4Addr::UNSPECIFIED, quic_port));
             Server::new(base.join(quic).bind().await)
                 .serve(router)
                 .await;
         } else {
             let quic =
-                QuinnListener::new(config.clone(), (std::net::Ipv4Addr::LOCALHOST, wt_port)).join(
-                    QuinnListener::new(config, (std::net::Ipv6Addr::LOCALHOST, wt_port)),
+                QuinnListener::new(config.clone(), (std::net::Ipv4Addr::LOCALHOST, quic_port)).join(
+                    QuinnListener::new(config, (std::net::Ipv6Addr::LOCALHOST, quic_port)),
                 );
             Server::new(base.join(quic).bind().await)
                 .serve(router)
@@ -134,20 +134,20 @@ async fn serve_unix(
 
 async fn serve_any(
     port: u16,
-    wt_port: u16,
+    quic_port: u16,
     rustls_config: Option<RustlsConfig>,
-    wt_rustls_config: Option<RustlsConfig>,
+    quic_rustls_config: Option<RustlsConfig>,
     router: Router,
 ) {
     // Bind to the IPv6 wildcard (::) which is dual-stack by default on Linux and macOS,
     // covering both IPv4 and IPv6 clients with a single socket.
     let http_addr = (std::net::Ipv6Addr::UNSPECIFIED, port);
-    let wt_addr = (std::net::Ipv6Addr::UNSPECIFIED, wt_port);
+    let quic_addr = (std::net::Ipv6Addr::UNSPECIFIED, quic_port);
     if let Some(config) = rustls_config {
         let tcp = TcpListener::new(http_addr).rustls(config);
-        if let Some(wt_config) = wt_rustls_config {
+        if let Some(quic_config) = quic_rustls_config {
             Server::new(
-                tcp.join(QuinnListener::new(wt_config, wt_addr))
+                tcp.join(QuinnListener::new(quic_config, quic_addr))
                     .bind()
                     .await,
             )
@@ -158,9 +158,9 @@ async fn serve_any(
         }
     } else {
         let tcp = TcpListener::new(http_addr);
-        if let Some(wt_config) = wt_rustls_config {
+        if let Some(quic_config) = quic_rustls_config {
             Server::new(
-                tcp.join(QuinnListener::new(wt_config, wt_addr))
+                tcp.join(QuinnListener::new(quic_config, quic_addr))
                     .bind()
                     .await,
             )
@@ -174,16 +174,16 @@ async fn serve_any(
 
 async fn serve_localhost(
     port: u16,
-    wt_port: u16,
+    quic_port: u16,
     rustls_config: Option<RustlsConfig>,
-    wt_rustls_config: Option<RustlsConfig>,
+    quic_rustls_config: Option<RustlsConfig>,
     router: Router,
 ) {
     let http_v4 = (std::net::Ipv4Addr::LOCALHOST, port);
     let http_v6 = (std::net::Ipv6Addr::LOCALHOST, port);
-    let quic = wt_rustls_config.map(|config| {
-        QuinnListener::new(config.clone(), (std::net::Ipv4Addr::LOCALHOST, wt_port)).join(
-            QuinnListener::new(config, (std::net::Ipv6Addr::LOCALHOST, wt_port)),
+    let quic = quic_rustls_config.map(|config| {
+        QuinnListener::new(config.clone(), (std::net::Ipv4Addr::LOCALHOST, quic_port)).join(
+            QuinnListener::new(config, (std::net::Ipv6Addr::LOCALHOST, quic_port)),
         )
     });
     if let Some(config) = rustls_config {
@@ -229,7 +229,7 @@ async fn main() -> anyhow::Result<()> {
         None
     };
 
-    let (wt_rustls_config, wt_cert_hash) = if args.web_transport {
+    let (quic_rustls_config, quic_cert_hash) = if args.quic {
         if let Some(config) = &rustls_config {
             (Some(config.clone()), String::new())
         } else {
@@ -240,10 +240,10 @@ async fn main() -> anyhow::Result<()> {
         (None, String::new())
     };
 
-    assets::set_web_transport_info(if args.web_transport {
-        Some(assets::WebTransportInfo {
-            port: args.web_transport_port,
-            cert_hash: wt_cert_hash,
+    assets::set_quic_info(if args.quic {
+        Some(assets::QuicInfo {
+            port: args.quic_port,
+            cert_hash: quic_cert_hash,
         })
     } else {
         None
@@ -256,8 +256,8 @@ async fn main() -> anyhow::Result<()> {
         apply_privdrop(&args)?;
         serve_unix(
             unix_path,
-            wt_rustls_config,
-            args.web_transport_port,
+            quic_rustls_config,
+            args.quic_port,
             args.listen_any,
             router,
         )
@@ -266,9 +266,9 @@ async fn main() -> anyhow::Result<()> {
         apply_privdrop(&args)?;
         serve_any(
             args.port,
-            args.web_transport_port,
+            args.quic_port,
             rustls_config,
-            wt_rustls_config,
+            quic_rustls_config,
             router,
         )
         .await;
@@ -276,9 +276,9 @@ async fn main() -> anyhow::Result<()> {
         apply_privdrop(&args)?;
         serve_localhost(
             args.port,
-            args.web_transport_port,
+            args.quic_port,
             rustls_config,
-            wt_rustls_config,
+            quic_rustls_config,
             router,
         )
         .await;
