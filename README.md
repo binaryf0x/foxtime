@@ -10,46 +10,77 @@ version of the NTP algorithm.
 
 By default the server listens for local HTTP connections on port 8123.
 
-### --listen-any
+### TCP socket options
+
+#### --listen-any
 
 Listens for connections on all network interfaces instead of only localhost.
 
-### --port &lt;PORT&gt;
+#### --port &lt;PORT&gt;
 
 Listens for connections by binding to &lt;PORT&gt; instead of 8123.
 
-### --h2c
+### UNIX socket options
 
-Enables support for plaintext HTTP/2. Only supported when listening on TCP/IP.
-
-### --unix &lt;PATH&gt;
+#### --unix &lt;PATH&gt;
 
 Creates a Unix domain socket at &lt;PATH&gt; to listen for connections.
 
-### --tls-cert
+#### --unix-owner &lt;USER&gt;
+
+Set the owning user of the Unix domain socket to &lt;USER&gt;.
+
+#### --unix-group &lt;GROUP&gt;
+
+Set the owning group of the Unix domain socket to &lt;GROUP&gt;.
+
+### TLS options
+
+#### --tls-cert
 
 Enables support for HTTPS using the TLS certificate read from a PEM-encoded file
 at &lt;PATH&gt;. Requires `--tls-key`.
 
-### --tls-key
+#### --tls-key
 
 Enables support for HTTPS using the private key read for a PEM-encoded file at
 &lt;PATH&gt;. Requires `--tls-cert`.
 
-### --web-transport
+### QUIC options
 
-Enables support for WebTransport. Opens an additional UDP socket to listen for
-QUIC connections. Uses port 8123 by default.
+If no TLS certificate is provided a self-signed certificate for "localhost" is
+automatically generated to enable WebTransport when testing locally.
 
-### --web-transport-port &lt;PORT&gt;
+#### --quic
+
+Enables QUIC support, including support for WebTransport. Opens an additional
+UDP socket to listen for QUIC connections. Uses port 8123 by default.
+
+#### --quic-port &lt;PORT&gt;
 
 Listens for QUIC connections on &lt;PORT&gt; instead.
 
-### -h, --help
+### Dropping privileges
+
+#### --user &lt;USER&gt;
+
+Drop privileges to &lt;USER&gt; after loading certs and binding sockets.
+
+#### --group &lt;GROUP&gt;
+
+Drop privileges to &lt;GROUP&gt; after loading certs and binding sockets.
+
+#### --chroot &lt;PATH&gt;
+
+Chroot to &lt;PATH&gt; after loading certs and binding sockets.
+
+### Miscellaneous options
+
+#### -h, --help
 
 Prints help text.
 
-### -V, --version
+#### -V, --version
 
 Prints the application version.
 
