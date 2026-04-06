@@ -10,11 +10,13 @@ async fn cors_any_origin(
     res: &mut Response,
     ctrl: &mut FlowCtrl,
 ) {
-    res.add_header("access-control-allow-origin", "*", true).ok();
+    res.add_header("access-control-allow-origin", "*", true)
+        .ok();
     if req.method() == salvo::http::Method::OPTIONS {
         res.add_header("access-control-allow-methods", "GET, HEAD", true)
             .ok();
-        res.add_header("access-control-allow-headers", "*", true).ok();
+        res.add_header("access-control-allow-headers", "*", true)
+            .ok();
         res.status_code(StatusCode::NO_CONTENT);
         return;
     }
