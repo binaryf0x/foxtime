@@ -79,6 +79,21 @@ body {
     border-color: #555;
   }
 }
+#settings-dialog button {
+  margin-top: 10px;
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  background-color: #eee;
+  cursor: pointer;
+}
+@media (prefers-color-scheme: dark) {
+  #settings-dialog button {
+    background-color: #444;
+    color: white;
+    border-color: #666;
+  }
+}
 svg g.numerals text {
   text-anchor: middle;
   dominant-baseline: middle;

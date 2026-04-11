@@ -260,3 +260,17 @@ if (navigator.wakeLock?.request) {
 } else {
   document.getElementById('enable-wake-lock')?.parentElement?.remove();
 }
+
+const copyUrlButton = document.getElementById('copy-url') as HTMLButtonElement;
+copyUrlButton.addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText(window.location.href);
+    const originalText = copyUrlButton.textContent;
+    copyUrlButton.textContent = 'Copied!';
+    setTimeout(() => {
+      copyUrlButton.textContent = originalText;
+    }, 2000);
+  } catch (err) {
+    console.error('Failed to copy: ', err);
+  }
+});
