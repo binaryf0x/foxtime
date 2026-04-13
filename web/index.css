@@ -8,6 +8,7 @@ body {
 #content {
   display: grid;
   grid-template-rows: auto min-content;
+  overflow: hidden;
 }
 #clock {
   aspect-ratio: 1 / 1;
