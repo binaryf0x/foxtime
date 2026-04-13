@@ -38,22 +38,7 @@ body {
 #time {
   font-family: monospace;
   font-size: 15vw;
-  line-height: 1;
   margin: 0;
-}
-.digit-wheel {
-  display: inline-block;
-  overflow: hidden;
-  height: 1em;
-  line-height: 1;
-  vertical-align: top;
-}
-.digit-wheel-inner {
-  display: block;
-  will-change: transform;
-}
-.digit-wheel-inner > span {
-  display: block;
 }
 #days {
   font-family: sans-serif;
