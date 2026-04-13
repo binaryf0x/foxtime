@@ -150,7 +150,7 @@ let lastTime = '??:??';
 let lastSecondsTens = -1;
 let lastSecondsOnes = -1;
 let lastTenths = -1;
-let lastTitle = "🦊🕒";
+let lastEmojiIndex = -1;
 let currentTimeZone = Temporal.Instant.fromEpochMilliseconds(0).toZonedDateTimeISO(timezoneSelect.value);
 
 syncSettings();
@@ -184,9 +184,9 @@ function updateTime() {
   }
 
   const emojiIndex = (zonedDateTime.hour % 12) * 2 + Math.floor(zonedDateTime.minute / 30);
-  const newTitle = `🦊${clockEmoji[emojiIndex]}`;
-  if (newTitle !== lastTitle) {
-    document.title = lastTitle = newTitle;
+  if (emojiIndex !== lastEmojiIndex) {
+    document.title = `🦊${clockEmoji[emojiIndex]}`;
+    lastEmojiIndex = emojiIndex;
   }
 
   if (showAnalogCheckbox.checked) {
