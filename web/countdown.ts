@@ -10,14 +10,22 @@ declare global {
 
 let timeOrigin = window.INITIAL_SERVER_TIME - performance.now();
 let targetInstant: Temporal.Instant | null = null;
-let lastTimeText = '';
 let lastDaysText = '';
+let lastPrefix = '';
+let lastSecondsTensVisible = true;
+let lastSecondsTens = -1;
+let lastSecondsOnes = -1;
+let lastTenths = -1;
 let animationFrameId: number | null = null;
 
 const delayDisplay = document.getElementById('delay') as HTMLElement;
 const offsetDisplay = document.getElementById('offset') as HTMLElement;
 const modeDisplay = document.getElementById('mode') as HTMLElement;
-const timeDisplay = document.getElementById('time') as HTMLElement;
+const countdownPrefix = document.getElementById('countdown-prefix') as HTMLElement;
+const secondsTensWheel = document.getElementById('seconds-tens-wheel') as HTMLElement;
+const secondsTensInner = document.getElementById('seconds-tens-inner') as HTMLElement;
+const secondsOnesInner = document.getElementById('seconds-ones-inner') as HTMLElement;
+const secondsTenthsInner = document.getElementById('seconds-tenths-inner') as HTMLElement;
 const daysDisplay = document.getElementById('days') as HTMLElement;
 const status = document.getElementById('status') as HTMLElement;
 const showStatsCheckbox = document.getElementById('show-stats') as HTMLInputElement;
@@ -71,7 +79,6 @@ function updateTime() {
 
   if (!targetInstant) {
     daysDisplay.textContent = lastDaysText = "";
-    timeDisplay.textContent = lastTimeText = "??:??:??.?";
     return;
   }
 
@@ -95,23 +102,46 @@ function updateTime() {
   hours %= 24;
 
   let daysText = '';
-  let timeText;
+  let prefix = '';
+  let showTens = true;
+
   if (days > 0) {
     daysText = `${days} ${days === 1 ? 'day' : 'days'}`;
-    timeText = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${tenths}`;
+    prefix = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:`;
   } else if (hours > 0) {
-    timeText = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${tenths}`;
+    prefix = `${hours}:${minutes.toString().padStart(2, '0')}:`;
   } else if (minutes > 0) {
-    timeText = `${minutes}:${seconds.toString().padStart(2, '0')}.${tenths}`;
+    prefix = `${minutes}:`;
   } else {
-    timeText = `${seconds}.${tenths}`;
+    showTens = seconds >= 10;
   }
 
   if (daysText !== lastDaysText) {
     daysDisplay.textContent = lastDaysText = daysText;
   }
-  if (timeText !== lastTimeText) {
-    timeDisplay.textContent = lastTimeText = timeText;
+  if (prefix !== lastPrefix) {
+    countdownPrefix.textContent = lastPrefix = prefix;
+  }
+  if (showTens !== lastSecondsTensVisible) {
+    secondsTensWheel.style.display = showTens ? '' : 'none';
+    lastSecondsTensVisible = showTens;
+  }
+
+  const secondsTensVal = Math.floor(seconds / 10);
+  if (secondsTensVal !== lastSecondsTens) {
+    secondsTensInner.style.transform = `translateY(-${secondsTensVal}em)`;
+    lastSecondsTens = secondsTensVal;
+  }
+
+  const secondsOnesVal = seconds % 10;
+  if (secondsOnesVal !== lastSecondsOnes) {
+    secondsOnesInner.style.transform = `translateY(-${secondsOnesVal}em)`;
+    lastSecondsOnes = secondsOnesVal;
+  }
+
+  if (tenths !== lastTenths) {
+    secondsTenthsInner.style.transform = `translateY(-${tenths}em)`;
+    lastTenths = tenths;
   }
 
   if (shouldContinue) {

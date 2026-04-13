@@ -53,6 +53,10 @@ minuteHand.transform.baseVal.initialize(minuteTransform);
 const secondTransform = clock.createSVGTransform();
 secondHand.transform.baseVal.initialize(secondTransform);
 
+const timeHm = document.getElementById('time-hm') as HTMLElement;
+const secondsTensInner = document.getElementById('seconds-tens-inner') as HTMLElement;
+const secondsOnesInner = document.getElementById('seconds-ones-inner') as HTMLElement;
+const secondsTenthsInner = document.getElementById('seconds-tenths-inner') as HTMLElement;
 const time = document.getElementById('time') as HTMLElement;
 const status = document.getElementById('status') as HTMLElement;
 const showAnalogCheckbox = document.getElementById('show-analog') as HTMLInputElement;
@@ -142,7 +146,10 @@ if (tzParam) {
   timezoneSelect.value = tzParam;
 }
 
-let lastTime = '??:??:??.?';
+let lastTime = '??:??';
+let lastSecondsTens = -1;
+let lastSecondsOnes = -1;
+let lastTenths = -1;
 let lastTitle = "🦊🕒";
 let currentTimeZone = Temporal.Instant.fromEpochMilliseconds(0).toZonedDateTimeISO(timezoneSelect.value);
 
@@ -155,11 +162,24 @@ function updateTime() {
   if (showDigitalCheckbox.checked) {
     const hoursStr = zonedDateTime.hour.toString().padStart(2, '0');
     const minutesStr = zonedDateTime.minute.toString().padStart(2, '0');
-    const secondsStr = zonedDateTime.second.toString().padStart(2, '0');
-    const tenths = Math.floor(zonedDateTime.millisecond / 100).toString();
-    const newTime = `${hoursStr}:${minutesStr}:${secondsStr}.${tenths}`;
+    const newTime = `${hoursStr}:${minutesStr}`;
     if (newTime !== lastTime) {
-      time.textContent = lastTime = newTime;
+      timeHm.textContent = lastTime = newTime;
+    }
+    const secondsTens = Math.floor(zonedDateTime.second / 10);
+    if (secondsTens !== lastSecondsTens) {
+      secondsTensInner.style.transform = `translateY(-${secondsTens}em)`;
+      lastSecondsTens = secondsTens;
+    }
+    const secondsOnes = zonedDateTime.second % 10;
+    if (secondsOnes !== lastSecondsOnes) {
+      secondsOnesInner.style.transform = `translateY(-${secondsOnes}em)`;
+      lastSecondsOnes = secondsOnes;
+    }
+    const tenths = Math.floor(zonedDateTime.millisecond / 100);
+    if (tenths !== lastTenths) {
+      secondsTenthsInner.style.transform = `translateY(-${tenths}em)`;
+      lastTenths = tenths;
     }
   }
 
