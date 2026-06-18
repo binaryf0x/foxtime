@@ -136,6 +136,23 @@ async fn serve_unix(
     args: &Args,
     router: Router,
 ) -> anyhow::Result<()> {
+    if std::path::Path::new(&unix_path).exists() {
+        let meta = std::fs::metadata(&unix_path).with_context(|| format!("Stat {unix_path}"))?;
+        if !std::os::unix::fs::FileTypeExt::is_socket(&meta.file_type()) {
+            anyhow::bail!("{unix_path} exists and is not a Unix socket");
+        }
+        match std::os::unix::net::UnixStream::connect(&unix_path) {
+            Ok(_) => anyhow::bail!("{unix_path} is already in use by another process"),
+            Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused => {
+                std::fs::remove_file(&unix_path)
+                    .with_context(|| format!("Remove stale socket {unix_path}"))?;
+            }
+            Err(e) => {
+                return Err(anyhow::Error::from(e))
+                    .with_context(|| format!("Probe socket {unix_path}"));
+            }
+        }
+    }
     let unix_acceptor = UnixListener::new(unix_path.clone()).bind().await;
     set_unix_permissions(&unix_path, args)?;
     if let Some(config) = quic_rustls_config {
