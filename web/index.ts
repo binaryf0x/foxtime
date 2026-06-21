@@ -17,12 +17,7 @@ const delayDisplay = document.getElementById('delay') as HTMLElement;
 const offsetDisplay = document.getElementById('offset') as HTMLElement;
 const modeDisplay = document.getElementById('mode') as HTMLElement;
 
-const worker = new Worker(new URL('./worker.js', import.meta.url));
-worker.postMessage({
-  webTransportPort: window.WEB_TRANSPORT_PORT,
-  webTransportCert: window.WEB_TRANSPORT_CERT,
-});
-worker.onmessage = (event: MessageEvent) => {
+function handleWorkerMessage(event: MessageEvent) {
   if (event.data.delay !== undefined) {
     delayDisplay.textContent = event.data.delay.toFixed(2);
   }
@@ -35,6 +30,21 @@ worker.onmessage = (event: MessageEvent) => {
   if (event.data.timeOriginOffset !== undefined) {
     timeOrigin = performance.timeOrigin - event.data.timeOriginOffset;
   }
+}
+
+const webTransportConfig = {
+  webTransportPort: window.WEB_TRANSPORT_PORT,
+  webTransportCert: window.WEB_TRANSPORT_CERT,
+};
+if (typeof SharedWorker !== 'undefined') {
+  const sharedWorker = new SharedWorker(new URL('./worker.js', import.meta.url));
+  sharedWorker.port.start();
+  sharedWorker.port.postMessage(webTransportConfig);
+  sharedWorker.port.onmessage = handleWorkerMessage;
+} else {
+  const worker = new Worker(new URL('./worker.js', import.meta.url));
+  worker.postMessage(webTransportConfig);
+  worker.onmessage = handleWorkerMessage;
 }
 
 const clockEmoji = ['🕛', '🕧', '🕐', '🕜', '🕑', '🕝', '🕒', '🕞',
@@ -185,10 +195,6 @@ function updateTime() {
   requestAnimationFrame(updateTime);
 }
 updateTime();
-
-document.onvisibilitychange = () => {
-  worker.postMessage({hidden: document.hidden});
-};
 
 if (navigator.wakeLock?.request) {
   const toggle = document.getElementById('enable-wake-lock') as HTMLInputElement;

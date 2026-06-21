@@ -125,12 +125,7 @@ function triggerUpdate() {
   }
 }
 
-const worker = new Worker(new URL('./worker.js', import.meta.url));
-worker.postMessage({
-  webTransportPort: window.WEB_TRANSPORT_PORT,
-  webTransportCert: window.WEB_TRANSPORT_CERT,
-});
-worker.onmessage = (event: MessageEvent) => {
+function handleWorkerMessage(event: MessageEvent) {
   if (event.data.delay !== undefined) {
     delayDisplay.textContent = event.data.delay.toFixed(2);
   }
@@ -146,6 +141,21 @@ worker.onmessage = (event: MessageEvent) => {
       triggerUpdate();
     }
   }
+}
+
+const webTransportConfig = {
+  webTransportPort: window.WEB_TRANSPORT_PORT,
+  webTransportCert: window.WEB_TRANSPORT_CERT,
+};
+if (typeof SharedWorker !== 'undefined') {
+  const sharedWorker = new SharedWorker(new URL('./worker.js', import.meta.url));
+  sharedWorker.port.start();
+  sharedWorker.port.postMessage(webTransportConfig);
+  sharedWorker.port.onmessage = handleWorkerMessage;
+} else {
+  const worker = new Worker(new URL('./worker.js', import.meta.url));
+  worker.postMessage(webTransportConfig);
+  worker.onmessage = handleWorkerMessage;
 }
 
 if (typeof Intl.supportedValuesOf === 'function') {

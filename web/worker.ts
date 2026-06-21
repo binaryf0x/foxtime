@@ -12,7 +12,6 @@ let timeoutId: number | undefined;
 let delays: number[] = [];
 let timeOrigins: number[] = [];
 let lastRequest = performance.now();
-let hidden = false;
 
 // WebTransport state
 let wt: WebTransport | undefined;
@@ -20,6 +19,21 @@ let wtWriter: WritableStreamDefaultWriter<BufferSource> | undefined;
 
 // WebSocket state
 let ws: WebSocket | undefined;
+
+const connectedPorts = new Set<MessagePort>();
+const isSharedWorker = 'onconnect' in (self as object);
+let lastState: object | null = null;
+
+function broadcast(message: object) {
+  lastState = message;
+  if (isSharedWorker) {
+    for (const port of connectedPorts) {
+      port.postMessage(message);
+    }
+  } else {
+    postMessage(message);
+  }
+}
 
 function average(array: number[]) {
   return array.reduce((a, b) => a + b, 0) / array.length;
@@ -71,7 +85,7 @@ async function handleWtResponses(reader: ReadableStreamDefaultReader<Uint8Array>
     }
   } catch (e) {
     console.error('WebTransport reader error:', e);
-    postMessage({mode: 'Disconnected'});
+    broadcast({mode: 'Disconnected'});
   } finally {
     try { wt?.close(); } catch {}
     wt = undefined;
@@ -169,11 +183,6 @@ async function measureHttp() {
 }
 
 function updateMeasurements(requestSent: number, responseReceived: number, serverTime: number, mode: string) {
-  if (hidden) {
-    lastRequest = responseReceived;
-    return;
-  }
-
   lastRequest = responseReceived;
   const newDelay = responseReceived - requestSent;
   console.log(`Measured round-trip time of ${newDelay.toFixed(2)}ms.`);
@@ -202,7 +211,7 @@ function updateMeasurements(requestSent: number, responseReceived: number, serve
   const timeOriginOffset = performance.timeOrigin - timeOrigin;
   const offset: number = Date.now() - new Date(performance.now() + timeOrigin).getTime();
 
-  postMessage({delay, timeOriginOffset, offset, mode});
+  broadcast({delay, timeOriginOffset, offset, mode});
 }
 
 async function detectOffset() {
@@ -228,7 +237,7 @@ async function detectOffset() {
     }
   } catch (e) {
     console.error('Failed to request time from server.', e);
-    postMessage({mode: 'Disconnected'});
+    broadcast({mode: 'Disconnected'});
     timeoutId = self.setTimeout(detectOffset, kShortDelay);
     return;
   }
@@ -237,25 +246,27 @@ async function detectOffset() {
       detectOffset, timeOrigins.length < kNumSamples ? kShortDelay : kLongDelay);
 }
 
-self.onmessage = (event) => {
+function handleMessage(event: MessageEvent) {
   if (event.data.webTransportPort) {
     webTransportPort = event.data.webTransportPort;
   }
   if (event.data.webTransportCert) {
     webTransportCert = event.data.webTransportCert;
   }
-  hidden = event.data.hidden;
+}
 
-  if (hidden) {
-    if (timeoutId) {
-      console.log('Pausing measurements.');
-      clearTimeout(timeoutId);
-      timeoutId = undefined;
+if (isSharedWorker) {
+  (self as unknown as SharedWorkerGlobalScope).onconnect = (event) => {
+    const port = event.ports[0];
+    port.start();
+    connectedPorts.add(port);
+    port.onmessage = handleMessage;
+    if (lastState) {
+      port.postMessage(lastState);
     }
-  } else if (!timeoutId) {
-    console.log('Resuming measurements.');
-    timeoutId = self.setTimeout(detectOffset, kShortDelay);
-  }
-};
+  };
+} else {
+  self.onmessage = handleMessage;
+}
 
 timeoutId = self.setTimeout(detectOffset, kShortDelay);
