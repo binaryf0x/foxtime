@@ -14,6 +14,11 @@ let lastTimeText = '';
 let lastDaysText = '';
 let animationFrameId: number | null = null;
 
+const pageLoadTime = performance.now();
+let lastWorkerDataTime: number | null = null;
+let lastSyncRequest = -Infinity;
+let postToWorker: (msg: object) => void;
+
 const delayDisplay = document.getElementById('delay') as HTMLElement;
 const offsetDisplay = document.getElementById('offset') as HTMLElement;
 const modeDisplay = document.getElementById('mode') as HTMLElement;
@@ -69,13 +74,21 @@ function syncSettings() {
 function updateTime() {
   animationFrameId = null;
 
+  const now = performance.now();
+  const timeSinceData = lastWorkerDataTime !== null ? now - lastWorkerDataTime : now - pageLoadTime;
+  const syncThreshold = lastWorkerDataTime !== null ? 70_000 : 5_000;
+  if (timeSinceData > syncThreshold && now - lastSyncRequest > 10_000) {
+    lastSyncRequest = now;
+    postToWorker({ sync: true });
+  }
+
   if (!targetInstant) {
     daysDisplay.textContent = lastDaysText = "";
     timeDisplay.textContent = lastTimeText = "??:??:??.?";
     return;
   }
 
-  const nowInstant = Temporal.Instant.fromEpochMilliseconds(Math.round(performance.now() + timeOrigin));
+  const nowInstant = Temporal.Instant.fromEpochMilliseconds(Math.round(now + timeOrigin));
   let shouldContinue = false;
 
   let diff = targetInstant.epochMilliseconds - nowInstant.epochMilliseconds;
@@ -137,6 +150,7 @@ function handleWorkerMessage(event: MessageEvent) {
   }
   if (event.data.timeOriginOffset !== undefined) {
     timeOrigin = performance.timeOrigin - event.data.timeOriginOffset;
+    lastWorkerDataTime = performance.now();
     if (targetInstant) {
       triggerUpdate();
     }
@@ -152,10 +166,12 @@ if (typeof SharedWorker !== 'undefined') {
   sharedWorker.port.start();
   sharedWorker.port.postMessage(webTransportConfig);
   sharedWorker.port.onmessage = handleWorkerMessage;
+  postToWorker = (msg) => sharedWorker.port.postMessage(msg);
 } else {
   const worker = new Worker(new URL('./worker.js', import.meta.url));
   worker.postMessage(webTransportConfig);
   worker.onmessage = handleWorkerMessage;
+  postToWorker = (msg) => worker.postMessage(msg);
 }
 
 if (typeof Intl.supportedValuesOf === 'function') {

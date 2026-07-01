@@ -13,6 +13,11 @@ type GElementInHTML = HTMLElement & SVGGElement;
 
 let timeOrigin = window.INITIAL_SERVER_TIME - performance.now();
 
+const pageLoadTime = performance.now();
+let lastWorkerDataTime: number | null = null;
+let lastSyncRequest = -Infinity;
+let postToWorker: (msg: object) => void;
+
 const delayDisplay = document.getElementById('delay') as HTMLElement;
 const offsetDisplay = document.getElementById('offset') as HTMLElement;
 const modeDisplay = document.getElementById('mode') as HTMLElement;
@@ -29,6 +34,7 @@ function handleWorkerMessage(event: MessageEvent) {
   }
   if (event.data.timeOriginOffset !== undefined) {
     timeOrigin = performance.timeOrigin - event.data.timeOriginOffset;
+    lastWorkerDataTime = performance.now();
   }
 }
 
@@ -41,10 +47,12 @@ if (typeof SharedWorker !== 'undefined') {
   sharedWorker.port.start();
   sharedWorker.port.postMessage(webTransportConfig);
   sharedWorker.port.onmessage = handleWorkerMessage;
+  postToWorker = (msg) => sharedWorker.port.postMessage(msg);
 } else {
   const worker = new Worker(new URL('./worker.js', import.meta.url));
   worker.postMessage(webTransportConfig);
   worker.onmessage = handleWorkerMessage;
+  postToWorker = (msg) => worker.postMessage(msg);
 }
 
 const clockEmoji = ['🕛', '🕧', '🕐', '🕜', '🕑', '🕝', '🕒', '🕞',
@@ -159,7 +167,15 @@ let currentTimeZone = Temporal.Instant.fromEpochMilliseconds(0).toZonedDateTimeI
 syncSettings();
 
 function updateTime() {
-  const nowInstant = Temporal.Instant.fromEpochMilliseconds(Math.round(performance.now() + timeOrigin));
+  const now = performance.now();
+  const timeSinceData = lastWorkerDataTime !== null ? now - lastWorkerDataTime : now - pageLoadTime;
+  const syncThreshold = lastWorkerDataTime !== null ? 70_000 : 5_000;
+  if (timeSinceData > syncThreshold && now - lastSyncRequest > 10_000) {
+    lastSyncRequest = now;
+    postToWorker({ sync: true });
+  }
+
+  const nowInstant = Temporal.Instant.fromEpochMilliseconds(Math.round(now + timeOrigin));
   const zonedDateTime = nowInstant.toZonedDateTimeISO(currentTimeZone);
 
   if (showDigitalCheckbox.checked) {

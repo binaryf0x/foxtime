@@ -9,6 +9,7 @@ let webTransportPort: number | undefined;
 let webTransportCert: string | undefined;
 
 let timeoutId: number | undefined;
+let isSyncing = false;
 let delays: number[] = [];
 let timeOrigins: number[] = [];
 let lastRequest = performance.now();
@@ -216,6 +217,7 @@ function updateMeasurements(requestSent: number, responseReceived: number, serve
 
 async function detectOffset() {
   timeoutId = undefined;
+  isSyncing = true;
 
   try {
     if (webTransportPort && typeof WebTransport !== 'undefined') {
@@ -235,15 +237,16 @@ async function detectOffset() {
         await measureHttp();
       }
     }
+
+    timeoutId = self.setTimeout(
+        detectOffset, timeOrigins.length < kNumSamples ? kShortDelay : kLongDelay);
   } catch (e) {
     console.error('Failed to request time from server.', e);
     broadcast({mode: 'Disconnected'});
     timeoutId = self.setTimeout(detectOffset, kShortDelay);
-    return;
   }
 
-  timeoutId = self.setTimeout(
-      detectOffset, timeOrigins.length < kNumSamples ? kShortDelay : kLongDelay);
+  isSyncing = false;
 }
 
 function handleMessage(event: MessageEvent) {
@@ -252,6 +255,18 @@ function handleMessage(event: MessageEvent) {
   }
   if (event.data.webTransportCert) {
     webTransportCert = event.data.webTransportCert;
+  }
+  if (event.data.sync) {
+    if (isSyncing) {
+      console.log("Client requested sync, but already syncing.");
+    } else {
+      console.log("Client requested sync.");
+      if (timeoutId !== undefined) {
+        self.clearTimeout(timeoutId);
+        timeoutId = undefined;
+      }
+      detectOffset();
+    }
   }
 }
 
