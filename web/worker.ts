@@ -5,8 +5,11 @@ const kSocketTimeout = 10000;
 const timeUrl = '/.well-known/time';
 const wsUrl = (self.location.protocol === 'https:' ? 'wss://' : 'ws://') + self.location.host + '/.well-known/time-ws';
 
+type TransportMode = 'Auto' | 'WebTransport' | 'WebSocket' | 'Fetch';
+
 let webTransportPort: number | undefined;
 let webTransportCert: string | undefined;
+let mode: TransportMode | undefined;
 
 let timeoutId: number | undefined;
 let isSyncing = false;
@@ -215,12 +218,45 @@ function updateMeasurements(requestSent: number, responseReceived: number, serve
   broadcast({delay, timeOriginOffset, offset, mode});
 }
 
+function setMode(newMode: TransportMode) {
+  if (mode === newMode) {
+    return;
+  }
+
+  console.log(`Setting mode to ${newMode}.`);
+  mode = newMode;
+  if (ws) {
+    ws.close();
+    ws = undefined;
+  }
+  if (wt) {
+    wt.close();
+    wt = undefined;
+  }
+
+  if (isSyncing) {
+    console.log("Will change mode after current sync.");
+  } else {
+    if (timeoutId !== undefined) {
+      self.clearTimeout(timeoutId);
+      timeoutId = undefined;
+    }
+    timeoutId = self.setTimeout(detectOffset, kShortDelay);
+  }
+}
+
 async function detectOffset() {
   timeoutId = undefined;
   isSyncing = true;
 
   try {
-    if (webTransportPort && typeof WebTransport !== 'undefined') {
+    if (mode === 'WebTransport') {
+      await sendWtRequest();
+    } else if (mode === 'WebSocket') {
+      await measureWs();
+    } else if (mode === 'Fetch') {
+      await measureHttp();
+    } else if (webTransportPort && typeof WebTransport !== 'undefined') {
       try {
         await sendWtRequest();
       } catch (e) {
@@ -256,6 +292,9 @@ function handleMessage(event: MessageEvent) {
   if (event.data.webTransportCert) {
     webTransportCert = event.data.webTransportCert;
   }
+  if ('mode' in event.data) {
+    setMode(event.data.mode);
+  }
   if (event.data.sync) {
     if (isSyncing) {
       console.log("Client requested sync, but already syncing.");
@@ -283,5 +322,3 @@ if (isSharedWorker) {
 } else {
   self.onmessage = handleMessage;
 }
-
-timeoutId = self.setTimeout(detectOffset, kShortDelay);

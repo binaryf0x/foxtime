@@ -157,19 +157,35 @@ function handleWorkerMessage(event: MessageEvent) {
   }
 }
 
-const webTransportConfig = {
+const kModeStorageKey = 'network-mode';
+const modeSelect = document.getElementById('network-mode') as HTMLSelectElement;
+modeSelect.value = localStorage.getItem(kModeStorageKey) ?? 'Auto';
+
+window.addEventListener('storage', (event) => {
+  if (event.key === kModeStorageKey) {
+    modeSelect.value = event.newValue ?? 'Auto';
+  }
+});
+
+modeSelect.addEventListener('change', () => {
+  localStorage.setItem(kModeStorageKey, modeSelect.value);
+  postToWorker({ mode: modeSelect.value });
+});
+
+const workerConfig = {
   webTransportPort: window.WEB_TRANSPORT_PORT,
   webTransportCert: window.WEB_TRANSPORT_CERT,
+  node: modeSelect.value,
 };
 if (typeof SharedWorker !== 'undefined') {
   const sharedWorker = new SharedWorker(new URL('./worker.js', import.meta.url));
   sharedWorker.port.start();
-  sharedWorker.port.postMessage(webTransportConfig);
+  sharedWorker.port.postMessage(workerConfig);
   sharedWorker.port.onmessage = handleWorkerMessage;
   postToWorker = (msg) => sharedWorker.port.postMessage(msg);
 } else {
   const worker = new Worker(new URL('./worker.js', import.meta.url));
-  worker.postMessage(webTransportConfig);
+  worker.postMessage(workerConfig);
   worker.onmessage = handleWorkerMessage;
   postToWorker = (msg) => worker.postMessage(msg);
 }
