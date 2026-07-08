@@ -1,6 +1,7 @@
 const kNumSamples = 5;
 const kShortDelay = 1000;
 const kLongDelay = 60000;
+const kConnectionTimeout = 5000;
 const kSocketTimeout = 10000;
 const timeUrl = '/.well-known/time';
 const wsUrl = (self.location.protocol === 'https:' ? 'wss://' : 'ws://') + self.location.host + '/.well-known/time-ws';
@@ -59,13 +60,26 @@ async function connectWt() {
   }
 
   wt = new WebTransport(url, options);
+  let timerId;
+  const timeoutPromise = new Promise((_, reject) =>
+    timerId = setTimeout(() => {
+      reject("WebTransport connection timed out.");
+      try {
+        wt!.close();
+      } catch (e) {
+        // Ignore the exception thrown by calling close() during connection
+        // establishment.
+      }
+    }, kConnectionTimeout));
   try {
-    await wt.ready;
+    await Promise.race([wt.ready, timeoutPromise]);
     console.log(`Connected to ${url}.`);
   } catch (e) {
     console.error(`Failed to connect to ${url}.`, e);
     wt = undefined;
     throw e;
+  } finally {
+    clearTimeout(timerId);
   }
 
   wtWriter = wt.datagrams.writable.getWriter();
@@ -123,7 +137,11 @@ async function connectWs(): Promise<void> {
   ws = new WebSocket(wsUrl);
   ws.binaryType = 'arraybuffer';
 
-  let {promise, resolve, reject} = Promise.withResolvers();
+  let { promise, resolve, reject } = Promise.withResolvers();
+  let timerId = setTimeout(() => {
+    ws!.close(1000, "Connection timeout.");
+    reject("WebSocket connection timeout.");
+  }, kConnectionTimeout);
   ws.onopen = () => {
     console.log(`Connected to ${wsUrl}.`);
     resolve(undefined);
@@ -132,7 +150,7 @@ async function connectWs(): Promise<void> {
     ws = undefined;
     reject(e);
   };
-  await promise;
+  await promise.finally(() => clearTimeout(timerId));
 }
 
 async function measureWs(): Promise<void> {
@@ -170,12 +188,18 @@ async function measureWs(): Promise<void> {
 async function measureHttp() {
   if (performance.now() - lastRequest > kSocketTimeout) {
     try {
-      await fetch(timeUrl, {method: 'HEAD'});
+      await fetch(timeUrl, {
+        method: 'HEAD',
+        signal: AbortSignal.timeout(kConnectionTimeout),
+      });
     } catch {}
   }
 
   const requestSent = performance.now();
-  const response = await fetch(timeUrl, {method: 'HEAD'});
+  const response = await fetch(timeUrl, {
+    method: 'HEAD',
+    signal: AbortSignal.timeout(kConnectionTimeout),
+  });
   const responseReceived = performance.now();
 
   if (!response.ok) {
@@ -225,13 +249,16 @@ function setMode(newMode: TransportMode) {
 
   console.log(`Setting mode to ${newMode}.`);
   mode = newMode;
-  if (ws) {
-    ws.close();
-    ws = undefined;
-  }
-  if (wt) {
-    wt.close();
-    wt = undefined;
+
+  if (mode !== 'Auto') {
+    if (mode !== 'WebTransport' && wt) {
+      try { wt.close(); } catch {}
+      wt = undefined;
+    }
+    if (mode !== 'WebSocket' && ws) {
+      try { ws.close(); } catch {}
+      ws = undefined;
+    }
   }
 
   if (isSyncing) {
@@ -250,9 +277,9 @@ async function detectOffset() {
   isSyncing = true;
 
   try {
-    if (mode === 'WebTransport') {
+    if (mode === 'WebTransport' || wt) {
       await sendWtRequest();
-    } else if (mode === 'WebSocket') {
+    } else if (mode === 'WebSocket' || ws) {
       await measureWs();
     } else if (mode === 'Fetch') {
       await measureHttp();
