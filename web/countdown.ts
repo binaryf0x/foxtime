@@ -2,19 +2,22 @@ import { Temporal } from 'temporal-polyfill';
 
 declare global {
   interface Window {
+    PAGE_LOAD_TIME: number;
     INITIAL_SERVER_TIME: number;
     WEB_TRANSPORT_PORT: number;
     WEB_TRANSPORT_CERT: string;
   }
 }
 
-let timeOrigin = window.INITIAL_SERVER_TIME - performance.now();
+const kNetworkModeKey = 'network-mode';
+const kShowStatsKey = 'show-stats';
+
+let timeOrigin = window.INITIAL_SERVER_TIME - window.PAGE_LOAD_TIME;
 let targetInstant: Temporal.Instant | null = null;
 let lastTimeText = '';
 let lastDaysText = '';
 let animationFrameId: number | null = null;
 
-const pageLoadTime = performance.now();
 let lastWorkerDataTime: number | null = null;
 let lastSyncRequest = -Infinity;
 let postToWorker: (msg: object) => void;
@@ -33,14 +36,6 @@ const settingsDialog = document.getElementById('settings-dialog') as HTMLDialogE
 const pageContent = document.getElementById('content') as HTMLElement;
 
 function updateUrl() {
-  const params = new URLSearchParams(window.location.search);
-
-  if (showStatsCheckbox.checked) {
-    params.delete('stats');
-  } else {
-    params.set('stats', '0');
-  }
-
   if (targetInstant) {
     params.set('t', (targetInstant.epochMilliseconds / 1000).toString());
   } else {
@@ -54,28 +49,11 @@ function updateUrl() {
   }
 }
 
-function syncSettings() {
-  if (showStatsCheckbox.checked) {
-    status.classList.remove('hidden');
-  } else {
-    status.classList.add('hidden');
-  }
-
-  if (targetInstant) {
-    const zdt = targetInstant.toZonedDateTimeISO(timezoneSelect.value);
-    // datetime-local expects YYYY-MM-DDTHH:MM:SS
-    const iso = zdt.toPlainDateTime().toString().split('.')[0];
-    targetTimeInput.value = iso;
-  }
-
-  updateUrl();
-}
-
 function updateTime() {
   animationFrameId = null;
 
   const now = performance.now();
-  const timeSinceData = lastWorkerDataTime !== null ? now - lastWorkerDataTime : now - pageLoadTime;
+  const timeSinceData = lastWorkerDataTime !== null ? now - lastWorkerDataTime : now - window.PAGE_LOAD_TIME;
   const syncThreshold = lastWorkerDataTime !== null ? 70_000 : 5_000;
   if (timeSinceData > syncThreshold && now - lastSyncRequest > 10_000) {
     lastSyncRequest = now;
@@ -157,18 +135,17 @@ function handleWorkerMessage(event: MessageEvent) {
   }
 }
 
-const kModeStorageKey = 'network-mode';
 const modeSelect = document.getElementById('network-mode') as HTMLSelectElement;
-modeSelect.value = localStorage.getItem(kModeStorageKey) ?? 'Auto';
+modeSelect.value = localStorage.getItem(kNetworkModeKey) ?? 'Auto';
 
 window.addEventListener('storage', (event) => {
-  if (event.key === kModeStorageKey) {
+  if (event.key === kNetworkModeKey) {
     modeSelect.value = event.newValue ?? 'Auto';
   }
 });
 
 modeSelect.addEventListener('change', () => {
-  localStorage.setItem(kModeStorageKey, modeSelect.value);
+  localStorage.setItem(kNetworkModeKey, modeSelect.value);
   postToWorker({ mode: modeSelect.value });
 });
 
@@ -205,24 +182,33 @@ if (typeof Intl.supportedValuesOf === 'function') {
   timezoneSelect.value = Temporal.Now.timeZoneId();
 }
 
-const params = new URLSearchParams(window.location.search);
-if (params.get('stats') === '0') {
+if (!JSON.parse(localStorage.getItem(kShowStatsKey) ?? 'true')) {
   showStatsCheckbox.checked = false;
+  status.classList.add('hidden');
 }
+
+const params = new URLSearchParams(window.location.search);
 const tParam = params.get('t');
 if (tParam) {
   const t = parseFloat(tParam);
   if (!isNaN(t)) {
     targetInstant = Temporal.Instant.fromEpochMilliseconds(Math.round(t * 1000));
   }
-}
-
-syncSettings();
-triggerUpdate();
-
-if (!tParam) {
+} else {
   settingsDialog.showModal();
 }
+
+function updateTimeInput() {
+  if (targetInstant) {
+    const zdt = targetInstant.toZonedDateTimeISO(timezoneSelect.value);
+    // datetime-local expects YYYY-MM-DDTHH:MM:SS
+    const iso = zdt.toPlainDateTime().toString().split('.')[0];
+    targetTimeInput.value = iso;
+  }
+}
+
+updateTimeInput();
+triggerUpdate();
 
 pageContent.addEventListener('click', () => {
   if (settingsDialog.open) {
@@ -238,8 +224,16 @@ settingsDialog.addEventListener('click', (event) => {
   }
 });
 
-showStatsCheckbox.addEventListener('change', syncSettings);
-timezoneSelect.addEventListener('change', syncSettings);
+showStatsCheckbox.addEventListener('change', () => {
+  localStorage.setItem(kShowStatsKey, JSON.stringify(showStatsCheckbox.checked));
+  if (showStatsCheckbox.checked) {
+    status.classList.remove('hidden');
+  } else {
+    status.classList.add('hidden');
+  }
+});
+
+timezoneSelect.addEventListener('change', updateTimeInput);
 
 targetTimeInput.addEventListener('change', () => {
   if (targetTimeInput.value) {

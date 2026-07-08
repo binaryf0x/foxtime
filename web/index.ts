@@ -11,9 +11,12 @@ declare global {
 type SVGElementInHTML = HTMLElement & SVGSVGElement;
 type GElementInHTML = HTMLElement & SVGGElement;
 
-let timeOrigin = window.INITIAL_SERVER_TIME - performance.now();
+const kNetworkModeKey = 'network-mode';
+const kShowAnalogKey = 'show-analog';
+const kShowDigitalKey = 'show-digital';
+const kShowStatsKey = 'show-stats';
 
-const pageLoadTime = performance.now();
+let timeOrigin = window.INITIAL_SERVER_TIME - window.PAGE_LOAD_TIME;
 let lastWorkerDataTime: number | null = null;
 let lastSyncRequest = -Infinity;
 let postToWorker: (msg: object) => void;
@@ -38,18 +41,17 @@ function handleWorkerMessage(event: MessageEvent) {
   }
 }
 
-const kModeStorageKey = 'network-mode';
 const modeSelect = document.getElementById('network-mode') as HTMLSelectElement;
-modeSelect.value = localStorage.getItem(kModeStorageKey) ?? 'Auto';
+modeSelect.value = localStorage.getItem(kNetworkModeKey) ?? 'Auto';
 
 window.addEventListener('storage', (event) => {
-  if (event.key === kModeStorageKey) {
+  if (event.key === kNetworkModeKey) {
     modeSelect.value = event.newValue ?? 'Auto';
   }
 });
 
 modeSelect.addEventListener('change', () => {
-  localStorage.setItem(kModeStorageKey, modeSelect.value);
+  localStorage.setItem(kNetworkModeKey, modeSelect.value);
   postToWorker({ mode: modeSelect.value });
 });
 
@@ -112,65 +114,20 @@ if (typeof Intl.supportedValuesOf === 'function') {
   timezoneSelect.value = Temporal.Now.timeZoneId();
 }
 
-function updateUrl() {
-  const params = new URLSearchParams(window.location.search);
-  const settings = [
-    { id: 'analog', checkbox: showAnalogCheckbox },
-    { id: 'digital', checkbox: showDigitalCheckbox },
-    { id: 'stats', checkbox: showStatsCheckbox },
-  ];
-
-  for (const { id, checkbox } of settings) {
-    if (checkbox.checked) {
-      params.delete(id);
-    } else {
-      params.set(id, '0');
-    }
-  }
-
-  if (timezoneSelect.value !== Temporal.Now.timeZoneId()) {
-    params.set('tz', timezoneSelect.value);
-  } else {
-    params.delete('tz');
-  }
-
-  const newSearch = params.toString();
-  const newUrl = window.location.pathname + (newSearch ? '?' + newSearch : '');
-  if (window.location.search !== (newSearch ? '?' + newSearch : '')) {
-    window.history.replaceState({}, '', newUrl);
-  }
+if (!JSON.parse(localStorage.getItem(kShowAnalogKey) ?? 'true')) {
+  showAnalogCheckbox.checked = false;
+  clock.classList.add('hidden');
 }
-
-function syncSettings() {
-  if (showAnalogCheckbox.checked) {
-    clock.classList.remove('hidden');
-  } else {
-    clock.classList.add('hidden');
-  }
-  if (showDigitalCheckbox.checked) {
-    time.classList.remove('hidden');
-  } else {
-    time.classList.add('hidden');
-  }
-  if (showStatsCheckbox.checked) {
-    status.classList.remove('hidden');
-  } else {
-    status.classList.add('hidden');
-  }
-  currentTimeZone = Temporal.Instant.fromEpochMilliseconds(0).toZonedDateTimeISO(timezoneSelect.value);
-  updateUrl();
+if (!JSON.parse(localStorage.getItem(kShowDigitalKey) ?? 'true')) {
+  showDigitalCheckbox.checked = false;
+  time.classList.add('hidden');
+}
+if (!JSON.parse(localStorage.getItem(kShowStatsKey) ?? 'true')) {
+  showStatsCheckbox.checked = false;
+  status.classList.add('hidden');
 }
 
 const params = new URLSearchParams(window.location.search);
-if (params.get('analog') === '0') {
-  showAnalogCheckbox.checked = false;
-}
-if (params.get('digital') === '0') {
-  showDigitalCheckbox.checked = false;
-}
-if (params.get('stats') === '0') {
-  showStatsCheckbox.checked = false;
-}
 const tzParam = params.get('tz');
 if (tzParam) {
   timezoneSelect.value = tzParam;
@@ -180,11 +137,9 @@ let lastTime = '??:??:??.?';
 let lastEmojiIndex = -1;
 let currentTimeZone = Temporal.Instant.fromEpochMilliseconds(0).toZonedDateTimeISO(timezoneSelect.value);
 
-syncSettings();
-
 function updateTime() {
   const now = performance.now();
-  const timeSinceData = lastWorkerDataTime !== null ? now - lastWorkerDataTime : now - pageLoadTime;
+  const timeSinceData = lastWorkerDataTime !== null ? now - lastWorkerDataTime : now - window.PAGE_LOAD_TIME;
   const syncThreshold = lastWorkerDataTime !== null ? 70_000 : 5_000;
   if (timeSinceData > syncThreshold && now - lastSyncRequest > 10_000) {
     lastSyncRequest = now;
@@ -269,10 +224,48 @@ settingsDialog.addEventListener('click', (event) => {
   }
 });
 
-showAnalogCheckbox.addEventListener('change', syncSettings);
-showDigitalCheckbox.addEventListener('change', syncSettings);
-showStatsCheckbox.addEventListener('change', syncSettings);
-timezoneSelect.addEventListener('change', syncSettings);
+showAnalogCheckbox.addEventListener('change', () => {
+  localStorage.setItem(kShowAnalogKey, JSON.stringify(showAnalogCheckbox.checked));
+  if (showAnalogCheckbox.checked) {
+    clock.classList.remove('hidden');
+  } else {
+    clock.classList.add('hidden');
+  }
+});
+
+showDigitalCheckbox.addEventListener('change', () => {
+  localStorage.setItem(kShowDigitalKey, JSON.stringify(showDigitalCheckbox.checked));
+  if (showDigitalCheckbox.checked) {
+    time.classList.remove('hidden');
+  } else {
+    time.classList.add('hidden');
+  }
+});
+
+showStatsCheckbox.addEventListener('change', () => {
+  localStorage.setItem(kShowStatsKey, JSON.stringify(showStatsCheckbox.checked));
+  if (showStatsCheckbox.checked) {
+    status.classList.remove('hidden');
+  } else {
+    status.classList.add('hidden');
+  }
+});
+
+timezoneSelect.addEventListener('change', () => {
+  currentTimeZone = Temporal.Instant.fromEpochMilliseconds(0).toZonedDateTimeISO(timezoneSelect.value);
+
+  if (timezoneSelect.value !== Temporal.Now.timeZoneId()) {
+    params.set('tz', timezoneSelect.value);
+  } else {
+    params.delete('tz');
+  }
+
+  const newSearch = params.toString();
+  const newUrl = window.location.pathname + (newSearch ? '?' + newSearch : '');
+  if (window.location.search !== (newSearch ? '?' + newSearch : '')) {
+    window.history.replaceState({}, '', newUrl);
+  }
+});
 
 document.addEventListener('keydown', (event) => {
   if (event.key === 'f') {
