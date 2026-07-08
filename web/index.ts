@@ -44,6 +44,12 @@ function handleWorkerMessage(event: MessageEvent) {
 const modeSelect = document.getElementById('network-mode') as HTMLSelectElement;
 modeSelect.value = localStorage.getItem(kNetworkModeKey) ?? 'Auto';
 
+if (!window.WEB_TRANSPORT_PORT || typeof WebTransport === 'undefined') {
+  const webTransportOption = modeSelect.querySelector('option[value="WebTransport"]') as HTMLOptionElement;
+  webTransportOption.textContent += ' (Unsupported)';
+  webTransportOption.disabled = true;
+}
+
 window.addEventListener('storage', (event) => {
   if (event.key === kNetworkModeKey) {
     modeSelect.value = event.newValue ?? 'Auto';
