@@ -16,7 +16,7 @@ let timeoutId: number | undefined;
 let isSyncing = false;
 let delays: number[] = [];
 let timeOrigins: number[] = [];
-let lastRequest = performance.now();
+let lastFetchRequest: number | undefined;
 
 // WebTransport state
 let wt: WebTransport | undefined;
@@ -186,7 +186,8 @@ async function measureWs(): Promise<void> {
 }
 
 async function measureHttp() {
-  if (performance.now() - lastRequest > kSocketTimeout) {
+  if (lastFetchRequest === undefined ||
+      performance.now() - lastFetchRequest > kSocketTimeout) {
     try {
       await fetch(timeUrl, {
         method: 'HEAD',
@@ -201,6 +202,7 @@ async function measureHttp() {
     signal: AbortSignal.timeout(kConnectionTimeout),
   });
   const responseReceived = performance.now();
+  lastFetchRequest = responseReceived;
 
   if (!response.ok) {
     throw new Error(`Server returned error: ${response.status}`);
@@ -211,7 +213,6 @@ async function measureHttp() {
 }
 
 function updateMeasurements(requestSent: number, responseReceived: number, serverTime: number, mode: string) {
-  lastRequest = responseReceived;
   const newDelay = responseReceived - requestSent;
   console.log(`Measured round-trip time of ${newDelay.toFixed(2)}ms.`);
   const newTimeOrigin = ((serverTime - requestSent) + (serverTime - responseReceived)) / 2;
@@ -259,6 +260,9 @@ function setMode(newMode: TransportMode) {
       try { ws.close(); } catch {}
       ws = undefined;
     }
+    if (mode !== 'Fetch') {
+      lastFetchRequest = undefined;
+    }
   }
 
   if (isSyncing) {
@@ -281,7 +285,7 @@ async function detectOffset() {
       await sendWtRequest();
     } else if (mode === 'WebSocket' || ws) {
       await measureWs();
-    } else if (mode === 'Fetch') {
+    } else if (mode === 'Fetch' || lastFetchRequest) {
       await measureHttp();
     } else if (webTransportPort && typeof WebTransport !== 'undefined') {
       try {
