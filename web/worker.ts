@@ -125,7 +125,9 @@ async function sendWtRequest() {
   dataView.setFloat64(0, requestSent, true);
 
   try {
+    console.log("Sending WebTransport request...");
     await wtWriter.write(dataView.buffer);
+    console.log("Done.");
   } catch (e) {
     wt = undefined;
     wtWriter = undefined;
