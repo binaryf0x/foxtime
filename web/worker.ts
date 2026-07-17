@@ -124,14 +124,22 @@ async function sendWtRequest() {
   const requestSent = performance.now();
   dataView.setFloat64(0, requestSent, true);
 
+  let timerId;
   try {
     console.log("Sending WebTransport request...");
-    await wtWriter.write(dataView.buffer);
+    const timeoutPromise = new Promise((_, reject) =>
+      timerId = setTimeout(() => {
+        reject("WebTransport write timed out.");
+        try { wt!.close(); } catch (e) {}
+      }, kConnectionTimeout));
+    await Promise.race([wtWriter.write(dataView.buffer), timeoutPromise]);
     console.log("Done.");
   } catch (e) {
     wt = undefined;
     wtWriter = undefined;
     throw e;
+  } finally {
+    clearTimeout(timerId);
   }
 }
 
@@ -142,6 +150,7 @@ async function connectWs(): Promise<void> {
   let { promise, resolve, reject } = Promise.withResolvers();
   let timerId = setTimeout(() => {
     ws!.close(1000, "Connection timeout.");
+    ws = undefined;
     reject("WebSocket connection timeout.");
   }, kConnectionTimeout);
   ws.onopen = () => {
@@ -168,7 +177,11 @@ async function measureWs(): Promise<void> {
   let requestSent = performance.now();
   ws.send(new Uint8Array(0));
 
-  let {promise, resolve, reject} = Promise.withResolvers();
+  let { promise, resolve, reject } = Promise.withResolvers();
+  let timerId = setTimeout(() => {
+    ws!.close(1000, "Request timeout.");
+    reject("WebSocket request timeout.");
+  }, kConnectionTimeout);
   ws.onmessage = (event) => {
     const responseReceived = performance.now();
     const view = new DataView(event.data);
@@ -177,14 +190,19 @@ async function measureWs(): Promise<void> {
     resolve(undefined);
   };
   ws.onclose = () => {
-    ws = undefined;
     reject(new Error('WebSocket closed'));
   };
   ws.onerror = (e) => {
-    ws = undefined;
     reject(e);
   }
-  await promise;
+  try {
+    await promise;
+  } catch (e) {
+    ws = undefined;
+    throw e;
+  } finally {
+    clearTimeout(timerId);
+  }
 }
 
 async function measureHttp() {
