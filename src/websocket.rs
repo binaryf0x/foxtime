@@ -64,7 +64,7 @@ mod tests {
             Server::new(acceptor).serve(router).await;
         });
 
-        let url = format!("ws://127.0.0.1:{port}/.well-known/time-ws");
+        let url = format!("ws://127.0.0.1:{port}/time-ws");
 
         let client = reqwest::Client::new();
         let response = client

@@ -86,7 +86,7 @@ mod tests {
             Server::new(acceptor).serve(router).await;
         });
 
-        let url = format!("https://127.0.0.1:{port}/.well-known/time-wt");
+        let url = format!("https://127.0.0.1:{port}/time-wt");
 
         let hash_bytes = base64::engine::general_purpose::STANDARD
             .decode(&cert_hash)

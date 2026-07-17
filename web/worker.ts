@@ -3,8 +3,6 @@ const kShortDelay = 1000;
 const kLongDelay = 60000;
 const kConnectionTimeout = 5000;
 const kSocketTimeout = 10000;
-const timeUrl = '/.well-known/time';
-const wsUrl = (self.location.protocol === 'https:' ? 'wss://' : 'ws://') + self.location.host + '/.well-known/time-ws';
 
 type TransportMode = 'Auto' | 'WebTransport' | 'WebSocket' | 'Fetch';
 
@@ -45,7 +43,7 @@ function average(array: number[]) {
 }
 
 async function connectWt() {
-  const url = `https://${new URL(self.location.href).hostname}:${webTransportPort}/.well-known/time-wt`;
+  const url = `https://${self.location.hostname}:${webTransportPort}/time-wt`;
 
   const options: WebTransportOptions = {
     requireUnreliable: true,
@@ -144,24 +142,32 @@ async function sendWtRequest() {
 }
 
 async function connectWs(): Promise<void> {
-  ws = new WebSocket(wsUrl);
+  const protocol = self.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = `${protocol}//${self.location.host}/time-ws`;
+
+  ws = new WebSocket(url);
   ws.binaryType = 'arraybuffer';
 
   let { promise, resolve, reject } = Promise.withResolvers();
   let timerId = setTimeout(() => {
     ws!.close(1000, "Connection timeout.");
-    ws = undefined;
     reject("WebSocket connection timeout.");
   }, kConnectionTimeout);
   ws.onopen = () => {
-    console.log(`Connected to ${wsUrl}.`);
+    console.log(`Connected to ${url}.`);
     resolve(undefined);
   };
   ws.onerror = (e) => {
-    ws = undefined;
     reject(e);
   };
-  await promise.finally(() => clearTimeout(timerId));
+  try {
+    await promise;
+  } catch (e) {
+    ws = undefined;
+    throw e;
+  } finally {
+    clearTimeout(timerId);
+  }
 }
 
 async function measureWs(): Promise<void> {
@@ -206,10 +212,12 @@ async function measureWs(): Promise<void> {
 }
 
 async function measureHttp() {
+  const url = '/.well-known/time';
+
   if (lastFetchRequest === undefined ||
       performance.now() - lastFetchRequest > kSocketTimeout) {
     try {
-      await fetch(timeUrl, {
+      await fetch(url, {
         method: 'HEAD',
         signal: AbortSignal.timeout(kConnectionTimeout),
       });
@@ -217,7 +225,7 @@ async function measureHttp() {
   }
 
   const requestSent = performance.now();
-  const response = await fetch(timeUrl, {
+  const response = await fetch(url, {
     method: 'HEAD',
     signal: AbortSignal.timeout(kConnectionTimeout),
   });

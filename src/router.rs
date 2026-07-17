@@ -31,7 +31,7 @@ pub(crate) fn router() -> Router {
                 .head(http::time)
                 .options(http::time_options),
         )
-        .push(Router::with_path(".well-known/time-ws").goal(websocket::time_ws))
-        .push(Router::with_path(".well-known/time-wt").goal(webtransport::time_wt))
+        .push(Router::with_path("time-ws").goal(websocket::time_ws))
+        .push(Router::with_path("time-wt").goal(webtransport::time_wt))
         .push(Router::with_path("{*path}").get(assets::static_files()))
 }

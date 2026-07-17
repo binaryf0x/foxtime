@@ -109,8 +109,8 @@ async fn run_web_socket(args: &Args) -> Result<()> {
         }
     }
 
-    if !url.ends_with("/.well-known/time-ws") {
-        url = format!("{}/.well-known/time-ws", url.trim_end_matches('/'));
+    if !url.ends_with("/time-ws") {
+        url = format!("{}/time-ws", url.trim_end_matches('/'));
     }
 
     let client = reqwest::Client::builder()
@@ -170,8 +170,8 @@ async fn run_web_transport(args: &Args) -> Result<()> {
         }
     }
 
-    if !url.ends_with("/.well-known/time-wt") {
-        url = format!("{}/.well-known/time-wt", url.trim_end_matches('/'));
+    if !url.ends_with("/time-wt") {
+        url = format!("{}/time-wt", url.trim_end_matches('/'));
     }
 
     let builder =
