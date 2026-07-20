@@ -1,9 +1,11 @@
 use std::sync::OnceLock;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::UNIX_EPOCH;
 
 use rust_embed::RustEmbed;
 use salvo::prelude::*;
 use salvo::serve_static::static_embed;
+
+use crate::clock;
 
 #[derive(RustEmbed)]
 #[folder = "dist/"]
@@ -31,7 +33,7 @@ fn serve_html(path: &str, res: &mut Response) {
         .unwrap_or_else(|| "0".to_string());
     let wt_cert = quic.map(|w| w.cert_hash.as_str()).unwrap_or("");
 
-    let timestamp = match SystemTime::now().duration_since(UNIX_EPOCH) {
+    let timestamp = match clock::now().duration_since(UNIX_EPOCH) {
         Ok(ts) => (ts.as_secs_f64() * 1_000.0).to_string(),
         Err(_) => {
             res.status_code(StatusCode::INTERNAL_SERVER_ERROR);

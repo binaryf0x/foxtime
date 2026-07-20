@@ -1,8 +1,10 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::UNIX_EPOCH;
 
 use bytes::BytesMut;
 use salvo::prelude::*;
 use salvo::websocket::{Message, WebSocketUpgrade};
+
+use crate::clock;
 
 #[handler]
 pub(crate) async fn time_ws(req: &mut Request, res: &mut Response) -> Result<(), StatusError> {
@@ -10,19 +12,17 @@ pub(crate) async fn time_ws(req: &mut Request, res: &mut Response) -> Result<(),
         .upgrade(req, res, |mut ws| async move {
             while let Some(msg) = ws.recv().await {
                 match msg {
-                    Ok(msg) if msg.is_binary() => {
-                        match SystemTime::now().duration_since(UNIX_EPOCH) {
-                            Ok(ts) => {
-                                let server_ts = ts.as_secs_f64();
-                                let mut response = BytesMut::with_capacity(8);
-                                response.extend_from_slice(&server_ts.to_le_bytes());
-                                if ws.send(Message::binary(response.freeze())).await.is_err() {
-                                    break;
-                                }
+                    Ok(msg) if msg.is_binary() => match clock::now().duration_since(UNIX_EPOCH) {
+                        Ok(ts) => {
+                            let server_ts = ts.as_secs_f64();
+                            let mut response = BytesMut::with_capacity(8);
+                            response.extend_from_slice(&server_ts.to_le_bytes());
+                            if ws.send(Message::binary(response.freeze())).await.is_err() {
+                                break;
                             }
-                            Err(_) => break,
                         }
-                    }
+                        Err(_) => break,
+                    },
                     Ok(msg) if msg.is_ping() => {
                         if ws
                             .send(Message::pong(msg.as_bytes().to_vec()))
@@ -47,8 +47,9 @@ mod tests {
     use reqwest_websocket::Upgrade;
     use salvo::conn::{Acceptor, TcpListener};
     use salvo::prelude::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::UNIX_EPOCH;
 
+    use crate::clock;
     use crate::router::router;
 
     #[tokio::test]
@@ -78,7 +79,7 @@ mod tests {
             .await
             .expect("WebSocket upgrade failed");
 
-        let t1 = SystemTime::now()
+        let t1 = clock::now()
             .duration_since(UNIX_EPOCH)
             .expect("system clock before epoch")
             .as_secs_f64();
@@ -94,7 +95,7 @@ mod tests {
             .expect("WebSocket closed before response")
             .expect("WebSocket error");
 
-        let t2 = SystemTime::now()
+        let t2 = clock::now()
             .duration_since(UNIX_EPOCH)
             .expect("system clock before epoch")
             .as_secs_f64();

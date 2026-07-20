@@ -3,9 +3,12 @@ use base64::Engine;
 use clap::Parser;
 use futures_util::{SinkExt, StreamExt};
 use reqwest_websocket::Upgrade;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::UNIX_EPOCH;
 use wtransport::tls::Sha256Digest;
 use wtransport::{ClientConfig, Endpoint};
+
+#[path = "../clock.rs"]
+mod clock;
 
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
@@ -61,7 +64,7 @@ async fn run_http(args: &Args) -> Result<()> {
         .await
         .with_context(|| format!("Failed to connect to {}", url))?;
 
-    let t1 = SystemTime::now()
+    let t1 = clock::now()
         .duration_since(UNIX_EPOCH)
         .context("Local clock is before epoch")?
         .as_secs_f64();
@@ -72,7 +75,7 @@ async fn run_http(args: &Args) -> Result<()> {
         .await
         .with_context(|| format!("Failed to connect to {}", url))?;
 
-    let t2 = SystemTime::now()
+    let t2 = clock::now()
         .duration_since(UNIX_EPOCH)
         .context("Local clock is before epoch")?
         .as_secs_f64();
@@ -126,7 +129,7 @@ async fn run_web_socket(args: &Args) -> Result<()> {
 
     let mut websocket = response.into_websocket().await?;
 
-    let t1 = SystemTime::now()
+    let t1 = clock::now()
         .duration_since(UNIX_EPOCH)
         .context("Local clock is before epoch")?
         .as_secs_f64();
@@ -140,7 +143,7 @@ async fn run_web_socket(args: &Args) -> Result<()> {
         .await
         .context("WebSocket closed before receiving response")??;
 
-    let t2 = SystemTime::now()
+    let t2 = clock::now()
         .duration_since(UNIX_EPOCH)
         .context("Local clock is before epoch")?
         .as_secs_f64();
@@ -198,7 +201,7 @@ async fn run_web_transport(args: &Args) -> Result<()> {
         .await
         .with_context(|| format!("Failed to connect to {}", url))?;
 
-    let t1 = SystemTime::now()
+    let t1 = clock::now()
         .duration_since(UNIX_EPOCH)
         .context("Local clock is before epoch")?
         .as_secs_f64();
@@ -212,7 +215,7 @@ async fn run_web_transport(args: &Args) -> Result<()> {
         .await
         .context("Failed to receive datagram")?;
 
-    let t2 = SystemTime::now()
+    let t2 = clock::now()
         .duration_since(UNIX_EPOCH)
         .context("Local clock is before epoch")?
         .as_secs_f64();

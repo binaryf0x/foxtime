@@ -1,7 +1,9 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::UNIX_EPOCH;
 
 use bytes::{Bytes, BytesMut};
 use salvo::prelude::*;
+
+use crate::clock;
 
 #[handler]
 pub(crate) async fn time_wt(req: &mut Request, res: &mut Response) -> Result<(), salvo::Error> {
@@ -23,7 +25,7 @@ pub(crate) async fn time_wt(req: &mut Request, res: &mut Response) -> Result<(),
                     Ok(datagram) => {
                         let payload: Bytes = datagram.into_payload();
                         if payload.len() >= 8 {
-                            match SystemTime::now().duration_since(UNIX_EPOCH) {
+                            match clock::now().duration_since(UNIX_EPOCH) {
                                 Ok(ts) => {
                                     let server_ts = ts.as_secs_f64();
                                     let mut response = BytesMut::with_capacity(16);
@@ -56,11 +58,11 @@ mod tests {
     use base64::Engine;
     use salvo::conn::QuinnListener;
     use salvo::prelude::*;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::UNIX_EPOCH;
     use wtransport::tls::Sha256Digest;
     use wtransport::{ClientConfig, Endpoint};
 
-    use crate::{router, self_signed};
+    use crate::{clock, router, self_signed};
 
     #[tokio::test]
     async fn test_time_wt() {
@@ -100,7 +102,7 @@ mod tests {
         let endpoint = Endpoint::client(client_config).unwrap();
         let session = endpoint.connect(&url).await.unwrap();
 
-        let t1 = SystemTime::now()
+        let t1 = clock::now()
             .duration_since(UNIX_EPOCH)
             .expect("system clock before epoch")
             .as_secs_f64();
@@ -109,7 +111,7 @@ mod tests {
 
         let response = session.receive_datagram().await.unwrap();
 
-        let t2 = SystemTime::now()
+        let t2 = clock::now()
             .duration_since(UNIX_EPOCH)
             .expect("system clock before epoch")
             .as_secs_f64();

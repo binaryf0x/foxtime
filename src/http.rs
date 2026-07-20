@@ -1,6 +1,8 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::UNIX_EPOCH;
 
 use salvo::prelude::*;
+
+use crate::clock;
 
 const X_HTTPSTIME: &str = "x-httpstime";
 
@@ -14,7 +16,7 @@ fn add_common_cors_headers(res: &mut Response) {
 #[handler]
 pub(crate) async fn time(res: &mut Response) {
     add_common_cors_headers(res);
-    match SystemTime::now().duration_since(UNIX_EPOCH) {
+    match clock::now().duration_since(UNIX_EPOCH) {
         Ok(ts) => {
             res.add_header(X_HTTPSTIME, ts.as_secs_f64().to_string(), true)
                 .ok();
@@ -36,16 +38,16 @@ pub(crate) async fn time_options(res: &mut Response) {
 #[cfg(test)]
 mod tests {
     use salvo::test::TestClient;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::UNIX_EPOCH;
 
-    use crate::{http::X_HTTPSTIME, router};
+    use crate::{clock, http::X_HTTPSTIME, router};
 
     #[tokio::test]
     async fn test_time() {
         let router = router::router();
         let service = salvo::Service::new(router);
 
-        let t1 = SystemTime::now()
+        let t1 = clock::now()
             .duration_since(UNIX_EPOCH)
             .expect("system clock before epoch")
             .as_secs_f64();
@@ -54,7 +56,7 @@ mod tests {
             .send(&service)
             .await;
 
-        let t2 = SystemTime::now()
+        let t2 = clock::now()
             .duration_since(UNIX_EPOCH)
             .expect("system clock before epoch")
             .as_secs_f64();

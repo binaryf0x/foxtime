@@ -6,6 +6,7 @@ use salvo::conn::{Acceptor, JoinedAcceptor};
 use salvo::prelude::*;
 
 mod assets;
+mod clock;
 mod http;
 mod router;
 mod self_signed;
@@ -53,6 +54,9 @@ struct Args {
 
     #[arg(long)]
     chroot: Option<String>,
+
+    #[arg(long, default_value_t = 0)]
+    offset_ms: i64,
 }
 
 fn parse_octal(s: &str) -> Result<u32, String> {
@@ -274,6 +278,10 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let args = Args::parse();
+
+    if args.offset_ms != 0 {
+        clock::set_offset_millis(args.offset_ms);
+    }
 
     let rustls_config = if let (Some(cert_path), Some(key_path)) = (&args.tls_cert, &args.tls_key) {
         let cert_pem = std::fs::read_to_string(cert_path)?;
