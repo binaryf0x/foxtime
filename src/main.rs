@@ -282,13 +282,7 @@ async fn main() -> anyhow::Result<()> {
 
     let args = Args::parse();
 
-    if args.offset_ms != 0 {
-        clock::set_offset_millis(args.offset_ms);
-    }
-
-    if args.freq_ppm != 0.0 {
-        clock::set_freq_ppm(args.freq_ppm);
-    }
+    clock::set_errors(args.offset_ms, args.freq_ppm);
 
     let rustls_config = if let (Some(cert_path), Some(key_path)) = (&args.tls_cert, &args.tls_key) {
         let cert_pem = std::fs::read_to_string(cert_path)?;
