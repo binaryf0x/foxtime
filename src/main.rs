@@ -57,6 +57,9 @@ struct Args {
 
     #[arg(long, default_value_t = 0)]
     offset_ms: i64,
+
+    #[arg(long, default_value_t = 0.0)]
+    freq_ppm: f64,
 }
 
 fn parse_octal(s: &str) -> Result<u32, String> {
@@ -281,6 +284,10 @@ async fn main() -> anyhow::Result<()> {
 
     if args.offset_ms != 0 {
         clock::set_offset_millis(args.offset_ms);
+    }
+
+    if args.freq_ppm != 0.0 {
+        clock::set_freq_ppm(args.freq_ppm);
     }
 
     let rustls_config = if let (Some(cert_path), Some(key_path)) = (&args.tls_cert, &args.tls_key) {
