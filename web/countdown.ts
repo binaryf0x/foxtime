@@ -18,12 +18,14 @@ let lastTimeText = '';
 let lastDaysText = '';
 let animationFrameId: number | null = null;
 
-let lastWorkerDataTime: number | null = null;
+let measurementTime: number | null = null;
+let freq = 1;
 let lastSyncRequest = -Infinity;
 let postToWorker: (msg: object) => void;
 
 const delayDisplay = document.getElementById('delay') as HTMLElement;
 const offsetDisplay = document.getElementById('offset') as HTMLElement;
+const freqDisplay = document.getElementById('freq') as HTMLElement;
 const modeDisplay = document.getElementById('mode') as HTMLElement;
 const timeDisplay = document.getElementById('time') as HTMLElement;
 const daysDisplay = document.getElementById('days') as HTMLElement;
@@ -53,8 +55,8 @@ function updateTime() {
   animationFrameId = null;
 
   const now = performance.now();
-  const timeSinceData = lastWorkerDataTime !== null ? now - lastWorkerDataTime : now - window.PAGE_LOAD_TIME;
-  const syncThreshold = lastWorkerDataTime !== null ? 70_000 : 5_000;
+  const timeSinceData = measurementTime !== null ? now - measurementTime : now - window.PAGE_LOAD_TIME;
+  const syncThreshold = measurementTime !== null ? 70_000 : 5_000;
   if (timeSinceData > syncThreshold && now - lastSyncRequest > 10_000) {
     lastSyncRequest = now;
     postToWorker({ sync: true });
@@ -66,7 +68,16 @@ function updateTime() {
     return;
   }
 
-  const nowInstant = Temporal.Instant.fromEpochMilliseconds(Math.round(now + timeOrigin));
+  let currentServerTime;
+  if (measurementTime) {
+    const elapsedLocal = now - measurementTime;
+    const elapsedServer = elapsedLocal * freq;
+    currentServerTime = timeOrigin + measurementTime + elapsedServer;
+  } else {
+    currentServerTime = timeOrigin + now;
+  }
+
+  const nowInstant = Temporal.Instant.fromEpochMilliseconds(Math.round(currentServerTime));
   let shouldContinue = false;
 
   let diff = targetInstant.epochMilliseconds - nowInstant.epochMilliseconds;
@@ -123,12 +134,18 @@ function handleWorkerMessage(event: MessageEvent) {
   if (event.data.offset !== undefined) {
     offsetDisplay.textContent = event.data.offset;
   }
+  if (event.data.freq !== undefined) {
+    freq = event.data.freq;
+    freqDisplay.textContent = ((event.data.freq - 1) * 1_000_000).toFixed(2);
+  }
+  if (event.data.localTimeOffset !== undefined) {
+    measurementTime = event.data.localTimeOffset - performance.timeOrigin;
+  }
   if (event.data.mode !== undefined) {
     modeDisplay.textContent = event.data.mode;
   }
   if (event.data.timeOriginOffset !== undefined) {
     timeOrigin = performance.timeOrigin - event.data.timeOriginOffset;
-    lastWorkerDataTime = performance.now();
     if (targetInstant) {
       triggerUpdate();
     }

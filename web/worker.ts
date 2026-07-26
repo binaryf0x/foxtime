@@ -3,6 +3,7 @@ const kShortDelay = 1000;
 const kLongDelay = 60000;
 const kConnectionTimeout = 5000;
 const kSocketTimeout = 10000;
+const kMaxClockShift = 5000;
 
 type TransportMode = 'Auto' | 'WebTransport' | 'WebSocket' | 'Fetch';
 
@@ -12,8 +13,14 @@ let mode: TransportMode | undefined;
 
 let timeoutId: number | undefined;
 let isSyncing = false;
-let delays: number[] = [];
-let timeOrigins: number[] = [];
+interface Measurement {
+  localTime: number;
+  serverTime: number;
+  delay: number;
+  timeOrigin: number;
+}
+
+let measurements: Measurement[] = [];
 let lastFetchRequest: number | undefined;
 
 // WebTransport state
@@ -241,34 +248,45 @@ async function measureHttp() {
 }
 
 function updateMeasurements(requestSent: number, responseReceived: number, serverTime: number, mode: string) {
+  const localTime = (requestSent + responseReceived) / 2;
   const newDelay = responseReceived - requestSent;
   console.log(`Measured round-trip time of ${newDelay.toFixed(2)}ms.`);
   const newTimeOrigin = ((serverTime - requestSent) + (serverTime - responseReceived)) / 2;
   console.log(`Measured time origin of ${newTimeOrigin}.`);
 
-  if (timeOrigins.length > 0) {
-    const oldTimeOrigin = average(timeOrigins);
-    if (Math.abs(oldTimeOrigin - newTimeOrigin) > newDelay) {
-      console.log('Large clock drift detected, clearing measurement history.');
-      delays = [];
-      timeOrigins = [];
+  if (measurements.length > 0) {
+    const oldTimeOrigin = average(measurements.map(m => m.timeOrigin));
+    const jump = Math.abs(oldTimeOrigin - newTimeOrigin);
+    if (jump > kMaxClockShift) {
+      console.log(`Large clock drift detected (${jump.toFixed(2)}ms), clearing measurement history.`);
+      measurements = [];
     }
   }
 
-  if (timeOrigins.length >= kNumSamples) {
-    delays.shift();
-    timeOrigins.shift();
+  let freq: number | undefined;
+  if (measurements.length >= kNumSamples) {
+    const m = measurements[0];
+    const localDelta = localTime - m.localTime;
+    const serverDelta = serverTime - m.serverTime;
+    freq = serverDelta / localDelta;
+
+    measurements.shift();
   }
 
-  delays.push(newDelay);
-  timeOrigins.push(newTimeOrigin);
+  measurements.push({
+    localTime,
+    serverTime,
+    delay: newDelay,
+    timeOrigin: newTimeOrigin,
+  });
 
-  const delay = average(delays);
-  const timeOrigin = average(timeOrigins);
+  const localTimeOffset = performance.timeOrigin + localTime;
+  const delay = average(measurements.map(m => m.delay));
+  const timeOrigin = average(measurements.map(m => m.timeOrigin));
   const timeOriginOffset = performance.timeOrigin - timeOrigin;
   const offset: number = Date.now() - new Date(performance.now() + timeOrigin).getTime();
 
-  broadcast({delay, timeOriginOffset, offset, mode});
+  broadcast({localTimeOffset, delay, timeOriginOffset, offset, freq, mode});
 }
 
 function setMode(newMode: TransportMode) {
@@ -334,7 +352,7 @@ async function detectOffset() {
     }
 
     timeoutId = self.setTimeout(
-        detectOffset, timeOrigins.length < kNumSamples ? kShortDelay : kLongDelay);
+        detectOffset, measurements.length < kNumSamples ? kShortDelay : kLongDelay);
   } catch (e) {
     console.error('Failed to request time from server.', e);
     broadcast({mode: 'Disconnected'});
