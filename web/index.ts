@@ -96,7 +96,7 @@ const secondTransform = clock.createSVGTransform();
 secondHand.transform.baseVal.initialize(secondTransform);
 
 const time = document.getElementById('time') as HTMLElement;
-const status = document.getElementById('status') as HTMLElement;
+const statusElements = document.querySelectorAll('.status');
 const showAnalogCheckbox = document.getElementById('show-analog') as HTMLInputElement;
 const showDigitalCheckbox = document.getElementById('show-digital') as HTMLInputElement;
 const showStatsCheckbox = document.getElementById('show-stats') as HTMLInputElement;
@@ -130,7 +130,7 @@ if (!JSON.parse(localStorage.getItem(kShowDigitalKey) ?? 'true')) {
 }
 if (!JSON.parse(localStorage.getItem(kShowStatsKey) ?? 'true')) {
   showStatsCheckbox.checked = false;
-  status.classList.add('hidden');
+  statusElements.forEach((el) => el.classList.add('hidden'));
 }
 
 const params = new URLSearchParams(window.location.search);
@@ -250,11 +250,13 @@ showDigitalCheckbox.addEventListener('change', () => {
 
 showStatsCheckbox.addEventListener('change', () => {
   localStorage.setItem(kShowStatsKey, JSON.stringify(showStatsCheckbox.checked));
-  if (showStatsCheckbox.checked) {
-    status.classList.remove('hidden');
-  } else {
-    status.classList.add('hidden');
-  }
+  statusElements.forEach((el) => {
+    if (showStatsCheckbox.checked) {
+      el.classList.remove('hidden');
+    } else {
+      el.classList.add('hidden');
+    }
+  });
 });
 
 timezoneSelect.addEventListener('change', () => {

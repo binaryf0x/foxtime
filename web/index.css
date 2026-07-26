@@ -51,13 +51,20 @@ body {
 #time.hidden {
   display: none;
 }
-#status {
+.status {
   position: absolute;
+  top: 0;
   font-family: sans-serif;
   margin: 8px;
 }
-#status.hidden {
+.status.hidden {
   display: none;
+}
+#status-left {
+  left: 0;
+}
+#status-right {
+  right: 0;
 }
 #settings-dialog {
   padding: 20px;

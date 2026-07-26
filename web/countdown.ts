@@ -27,7 +27,7 @@ const offsetDisplay = document.getElementById('offset') as HTMLElement;
 const modeDisplay = document.getElementById('mode') as HTMLElement;
 const timeDisplay = document.getElementById('time') as HTMLElement;
 const daysDisplay = document.getElementById('days') as HTMLElement;
-const status = document.getElementById('status') as HTMLElement;
+const statusElements = document.querySelectorAll('.status');
 const showStatsCheckbox = document.getElementById('show-stats') as HTMLInputElement;
 const fullscreenCheckbox = document.getElementById('fullscreen') as HTMLInputElement;
 const timezoneSelect = document.getElementById('timezone') as HTMLSelectElement;
@@ -190,7 +190,7 @@ if (typeof Intl.supportedValuesOf === 'function') {
 
 if (!JSON.parse(localStorage.getItem(kShowStatsKey) ?? 'true')) {
   showStatsCheckbox.checked = false;
-  status.classList.add('hidden');
+  statusElements.forEach((el) => el.classList.add('hidden'));
 }
 
 const params = new URLSearchParams(window.location.search);
@@ -232,11 +232,13 @@ settingsDialog.addEventListener('click', (event) => {
 
 showStatsCheckbox.addEventListener('change', () => {
   localStorage.setItem(kShowStatsKey, JSON.stringify(showStatsCheckbox.checked));
-  if (showStatsCheckbox.checked) {
-    status.classList.remove('hidden');
-  } else {
-    status.classList.add('hidden');
-  }
+  statusElements.forEach((el) => {
+    if (showStatsCheckbox.checked) {
+      el.classList.remove('hidden');
+    } else {
+      el.classList.add('hidden');
+    }
+  });
 });
 
 timezoneSelect.addEventListener('change', updateTimeInput);
