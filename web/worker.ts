@@ -257,19 +257,23 @@ function updateMeasurements(requestSent: number, responseReceived: number, serve
   if (measurements.length > 0) {
     const oldTimeOrigin = average(measurements.map(m => m.timeOrigin));
     const jump = Math.abs(oldTimeOrigin - newTimeOrigin);
-    if (jump > kMaxClockShift) {
+    if (jump > newDelay) {
       console.log(`Large clock drift detected (${jump.toFixed(2)}ms), clearing measurement history.`);
       measurements = [];
     }
   }
 
-  let freq: number | undefined;
-  if (measurements.length >= kNumSamples) {
+  let freq: number | null = null;
+  if (measurements.length > 1) {
     const m = measurements[0];
     const localDelta = localTime - m.localTime;
-    const serverDelta = serverTime - m.serverTime;
-    freq = serverDelta / localDelta;
+    if (localDelta >= 60_000) {
+      const serverDelta = serverTime - m.serverTime;
+      freq = serverDelta / localDelta;
+    }
+  }
 
+  if (measurements.length >= kNumSamples) {
     measurements.shift();
   }
 

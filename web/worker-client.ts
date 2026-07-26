@@ -11,7 +11,7 @@ const kNetworkModeKey = 'network-mode';
 
 let timeOrigin = window.INITIAL_SERVER_TIME - window.PAGE_LOAD_TIME;
 let measurementTime: number | null = null;
-let freq = 1;
+let freq: number | null = null;
 let lastSyncRequest = -Infinity;
 let postToWorkerFn: ((msg: object) => void) | null = null;
 
@@ -29,10 +29,10 @@ export function getCurrentServerTime(now: number = performance.now()): number {
     postToWorker({ sync: true });
   }
 
-  if (measurementTime !== null) {
-    const elapsedLocal = now - measurementTime;
+  if (freq !== null) {
+    const elapsedLocal = now - measurementTime!;
     const elapsedServer = elapsedLocal * freq;
-    return timeOrigin + measurementTime + elapsedServer;
+    return timeOrigin + measurementTime! + elapsedServer;
   } else {
     return timeOrigin + now;
   }
@@ -54,7 +54,11 @@ export function initWorker(onTimeOriginUpdate?: () => void) {
     }
     if (event.data.freq !== undefined) {
       freq = event.data.freq;
-      freqDisplay.textContent = ((event.data.freq - 1) * 1_000_000).toFixed(2);
+      if (freq === null) {
+        freqDisplay.textContent = '?';
+      } else {
+        freqDisplay.textContent = ((event.data.freq - 1) * 1_000_000).toFixed(2);
+      }
     }
     if (event.data.localTimeOffset !== undefined) {
       measurementTime = event.data.localTimeOffset - performance.timeOrigin;
