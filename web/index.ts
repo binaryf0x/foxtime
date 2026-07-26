@@ -1,91 +1,15 @@
 import { Temporal } from 'temporal-polyfill';
-
-declare global {
-  interface Window {
-    INITIAL_SERVER_TIME: number;
-    WEB_TRANSPORT_PORT: number;
-    WEB_TRANSPORT_CERT: string;
-  }
-}
+import { getCurrentServerTime, initWorker } from './worker-client';
+import { initCommonUI } from './ui';
 
 type SVGElementInHTML = HTMLElement & SVGSVGElement;
 type GElementInHTML = HTMLElement & SVGGElement;
 
-const kNetworkModeKey = 'network-mode';
 const kShowAnalogKey = 'show-analog';
 const kShowDigitalKey = 'show-digital';
-const kShowStatsKey = 'show-stats';
 
-let timeOrigin = window.INITIAL_SERVER_TIME - window.PAGE_LOAD_TIME;
-let measurementTime: number | null = null;
-let freq = 1;
-let lastSyncRequest = -Infinity;
-let postToWorker: (msg: object) => void;
-
-const delayDisplay = document.getElementById('delay') as HTMLElement;
-const offsetDisplay = document.getElementById('offset') as HTMLElement;
-const freqDisplay = document.getElementById('freq') as HTMLElement;
-const modeDisplay = document.getElementById('mode') as HTMLElement;
-
-function handleWorkerMessage(event: MessageEvent) {
-  if (event.data.delay !== undefined) {
-    delayDisplay.textContent = event.data.delay.toFixed(2);
-  }
-  if (event.data.offset !== undefined) {
-    offsetDisplay.textContent = event.data.offset;
-  }
-  if (event.data.freq !== undefined) {
-    freq = event.data.freq;
-    freqDisplay.textContent = ((event.data.freq - 1) * 1_000_000).toFixed(2);
-  }
-  if (event.data.localTimeOffset !== undefined) {
-    measurementTime = event.data.localTimeOffset - performance.timeOrigin;
-  }
-  if (event.data.mode !== undefined) {
-    modeDisplay.textContent = event.data.mode;
-  }
-  if (event.data.timeOriginOffset !== undefined) {
-    timeOrigin = performance.timeOrigin - event.data.timeOriginOffset;
-  }
-}
-
-const modeSelect = document.getElementById('network-mode') as HTMLSelectElement;
-modeSelect.value = localStorage.getItem(kNetworkModeKey) ?? 'Auto';
-
-if (!window.WEB_TRANSPORT_PORT || typeof WebTransport === 'undefined') {
-  const webTransportOption = modeSelect.querySelector('option[value="WebTransport"]') as HTMLOptionElement;
-  webTransportOption.textContent += ' (Unsupported)';
-  webTransportOption.disabled = true;
-}
-
-window.addEventListener('storage', (event) => {
-  if (event.key === kNetworkModeKey) {
-    modeSelect.value = event.newValue ?? 'Auto';
-  }
-});
-
-modeSelect.addEventListener('change', () => {
-  localStorage.setItem(kNetworkModeKey, modeSelect.value);
-  postToWorker({ mode: modeSelect.value });
-});
-
-const workerConfig = {
-  webTransportPort: window.WEB_TRANSPORT_PORT,
-  webTransportCert: window.WEB_TRANSPORT_CERT,
-  mode: modeSelect.value,
-};
-if (typeof SharedWorker !== 'undefined') {
-  const sharedWorker = new SharedWorker(new URL('./worker.js', import.meta.url));
-  sharedWorker.port.start();
-  sharedWorker.port.postMessage(workerConfig);
-  sharedWorker.port.onmessage = handleWorkerMessage;
-  postToWorker = (msg) => sharedWorker.port.postMessage(msg);
-} else {
-  const worker = new Worker(new URL('./worker.js', import.meta.url));
-  worker.postMessage(workerConfig);
-  worker.onmessage = handleWorkerMessage;
-  postToWorker = (msg) => worker.postMessage(msg);
-}
+initWorker();
+initCommonUI();
 
 const clockEmoji = ['🕛', '🕧', '🕐', '🕜', '🕑', '🕝', '🕒', '🕞',
   '🕓', '🕟', '🕔', '🕠', '🕕', '🕡', '🕖', '🕣', '🕗', '🕢', '🕘',
@@ -104,29 +28,9 @@ const secondTransform = clock.createSVGTransform();
 secondHand.transform.baseVal.initialize(secondTransform);
 
 const time = document.getElementById('time') as HTMLElement;
-const statusElements = document.querySelectorAll('.status');
 const showAnalogCheckbox = document.getElementById('show-analog') as HTMLInputElement;
 const showDigitalCheckbox = document.getElementById('show-digital') as HTMLInputElement;
-const showStatsCheckbox = document.getElementById('show-stats') as HTMLInputElement;
-const fullscreenCheckbox = document.getElementById('fullscreen') as HTMLInputElement;
 const timezoneSelect = document.getElementById('timezone') as HTMLSelectElement;
-
-if (typeof Intl.supportedValuesOf === 'function') {
-  const timeZones = Intl.supportedValuesOf('timeZone');
-  // Workaround for inconsistent implementations across Javascript engines.
-  // https://github.com/tc39/ecma402/issues/778
-  if (!timeZones.includes('UTC')) {
-    timeZones.push('UTC');
-    timeZones.sort();
-  }
-  for (const tz of timeZones) {
-    const option = document.createElement('option');
-    option.value = tz;
-    option.textContent = tz;
-    timezoneSelect.appendChild(option);
-  }
-  timezoneSelect.value = Temporal.Now.timeZoneId();
-}
 
 if (!JSON.parse(localStorage.getItem(kShowAnalogKey) ?? 'true')) {
   showAnalogCheckbox.checked = false;
@@ -135,10 +39,6 @@ if (!JSON.parse(localStorage.getItem(kShowAnalogKey) ?? 'true')) {
 if (!JSON.parse(localStorage.getItem(kShowDigitalKey) ?? 'true')) {
   showDigitalCheckbox.checked = false;
   time.classList.add('hidden');
-}
-if (!JSON.parse(localStorage.getItem(kShowStatsKey) ?? 'true')) {
-  showStatsCheckbox.checked = false;
-  statusElements.forEach((el) => el.classList.add('hidden'));
 }
 
 const params = new URLSearchParams(window.location.search);
@@ -152,22 +52,7 @@ let lastEmojiIndex = -1;
 let currentTimeZone = Temporal.Instant.fromEpochMilliseconds(0).toZonedDateTimeISO(timezoneSelect.value);
 
 function updateTime() {
-  const now = performance.now();
-  const timeSinceData = measurementTime !== null ? now - measurementTime : now - window.PAGE_LOAD_TIME;
-  const syncThreshold = measurementTime !== null ? 70_000 : 5_000;
-  if (timeSinceData > syncThreshold && now - lastSyncRequest > 10_000) {
-    lastSyncRequest = now;
-    postToWorker({ sync: true });
-  }
-
-  let currentServerTime;
-  if (measurementTime) {
-    const elapsedLocal = now - measurementTime;
-    const elapsedServer = elapsedLocal * freq;
-    currentServerTime = timeOrigin + measurementTime + elapsedServer;
-  } else {
-    currentServerTime = timeOrigin + now;
-  }
+  const currentServerTime = getCurrentServerTime();
 
   const nowInstant = Temporal.Instant.fromEpochMilliseconds(Math.round(currentServerTime));
   const zonedDateTime = nowInstant.toZonedDateTimeISO(currentTimeZone);
@@ -206,47 +91,6 @@ function updateTime() {
 }
 updateTime();
 
-if (navigator.wakeLock?.request) {
-  const toggle = document.getElementById('enable-wake-lock') as HTMLInputElement;
-  let wakeLock: WakeLockSentinel | null = null;
-  toggle.addEventListener('change', async () => {
-    if (toggle.checked && !wakeLock) {
-      toggle.disabled = true;
-      try {
-        wakeLock = await navigator.wakeLock.request('screen');
-        wakeLock.onrelease = () => {
-          toggle.checked = false;
-          wakeLock = null;
-        }
-      } catch (e) {
-        console.error("Failed to acquire wake lock!", e);
-      } finally {
-        toggle.disabled = false;
-      }
-    } else if (!toggle.checked && wakeLock) {
-      wakeLock.release();
-      wakeLock = null;
-    }
-  });
-} else {
-  document.getElementById('enable-wake-lock')?.remove();
-}
-
-const pageContent = document.getElementById('content') as HTMLElement;
-const settingsDialog = document.getElementById('settings-dialog') as HTMLDialogElement;
-pageContent.addEventListener('click', () => {
-  if (settingsDialog.open) {
-    settingsDialog.close();
-  } else {
-    settingsDialog.showModal();
-  }
-});
-settingsDialog.addEventListener('click', (event) => {
-  if (event.target === settingsDialog) {
-    settingsDialog.close();
-  }
-});
-
 showAnalogCheckbox.addEventListener('change', () => {
   localStorage.setItem(kShowAnalogKey, JSON.stringify(showAnalogCheckbox.checked));
   if (showAnalogCheckbox.checked) {
@@ -265,17 +109,6 @@ showDigitalCheckbox.addEventListener('change', () => {
   }
 });
 
-showStatsCheckbox.addEventListener('change', () => {
-  localStorage.setItem(kShowStatsKey, JSON.stringify(showStatsCheckbox.checked));
-  statusElements.forEach((el) => {
-    if (showStatsCheckbox.checked) {
-      el.classList.remove('hidden');
-    } else {
-      el.classList.add('hidden');
-    }
-  });
-});
-
 timezoneSelect.addEventListener('change', () => {
   currentTimeZone = Temporal.Instant.fromEpochMilliseconds(0).toZonedDateTimeISO(timezoneSelect.value);
 
@@ -290,30 +123,4 @@ timezoneSelect.addEventListener('change', () => {
   if (window.location.search !== (newSearch ? '?' + newSearch : '')) {
     window.history.replaceState({}, '', newUrl);
   }
-});
-
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'f') {
-    if (document.fullscreenElement) {
-      document.exitFullscreen();
-    } else {
-      document.documentElement.requestFullscreen();
-    }
-  } else if (event.key === 's') {
-    settingsDialog.showModal();
-  }
-});
-
-if (document.fullscreenElement) {
-  fullscreenCheckbox.checked = true;
-}
-fullscreenCheckbox.addEventListener('change', () => {
-  if (fullscreenCheckbox.checked) {
-    document.documentElement.requestFullscreen();
-  } else {
-    document.exitFullscreen();
-  }
-});
-document.addEventListener('fullscreenchange', () => {
-  fullscreenCheckbox.checked = !!document.fullscreenElement;
 });
