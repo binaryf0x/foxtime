@@ -9,8 +9,8 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        main: resolve(__dirname, 'web/index.html'),
-        countdown: resolve(__dirname, 'web/countdown.html'),
+        main: resolve(import.meta.dirname, 'web/index.html'),
+        countdown: resolve(import.meta.dirname, 'web/countdown.html'),
       },
     },
   },
