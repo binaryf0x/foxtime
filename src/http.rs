@@ -16,6 +16,8 @@ fn add_common_cors_headers(res: &mut Response) {
 #[handler]
 pub(crate) async fn time(res: &mut Response) {
     add_common_cors_headers(res);
+    res.add_header("cache-control", "no-cache, no-store, max-age=0", true)
+        .ok();
     match clock::now().duration_since(UNIX_EPOCH) {
         Ok(ts) => {
             res.add_header(X_HTTPSTIME, ts.as_secs_f64().to_string(), true)
@@ -62,6 +64,14 @@ mod tests {
             .as_secs_f64();
 
         assert_eq!(response.status_code, Some(salvo::http::StatusCode::OK));
+
+        let cache_control = response
+            .headers()
+            .get(salvo::http::header::CACHE_CONTROL)
+            .expect("response missing cache-control header")
+            .to_str()
+            .expect("cache-control header is not valid UTF-8");
+        assert_eq!(cache_control, "no-cache, no-store, max-age=0");
 
         let server_time: f64 = response
             .headers()

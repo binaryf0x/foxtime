@@ -24,6 +24,8 @@ pub(crate) fn set_quic_info(quic_info: Option<QuicInfo>) {
 }
 
 fn serve_html(path: &str, res: &mut Response) {
+    res.add_header("cache-control", "no-cache, no-store, max-age=0", true)
+        .ok();
     let asset = Asset::get(path).unwrap();
     let contents = std::str::from_utf8(asset.data.as_ref()).unwrap();
 
@@ -61,4 +63,49 @@ pub(crate) async fn countdown(res: &mut Response) {
 
 pub(crate) fn static_files() -> impl Handler {
     static_embed::<Asset>()
+}
+
+#[cfg(test)]
+mod tests {
+    use salvo::test::TestClient;
+
+    use crate::router;
+
+    #[tokio::test]
+    async fn test_index_cache_control() {
+        let router = router::router();
+        let service = salvo::Service::new(router);
+
+        let response = TestClient::get("http://localhost/").send(&service).await;
+
+        assert_eq!(response.status_code, Some(salvo::http::StatusCode::OK));
+
+        let cache_control = response
+            .headers()
+            .get(salvo::http::header::CACHE_CONTROL)
+            .expect("response missing cache-control header")
+            .to_str()
+            .expect("cache-control header is not valid UTF-8");
+        assert_eq!(cache_control, "no-cache, no-store, max-age=0");
+    }
+
+    #[tokio::test]
+    async fn test_countdown_cache_control() {
+        let router = router::router();
+        let service = salvo::Service::new(router);
+
+        let response = TestClient::get("http://localhost/countdown")
+            .send(&service)
+            .await;
+
+        assert_eq!(response.status_code, Some(salvo::http::StatusCode::OK));
+
+        let cache_control = response
+            .headers()
+            .get(salvo::http::header::CACHE_CONTROL)
+            .expect("response missing cache-control header")
+            .to_str()
+            .expect("cache-control header is not valid UTF-8");
+        assert_eq!(cache_control, "no-cache, no-store, max-age=0");
+    }
 }
