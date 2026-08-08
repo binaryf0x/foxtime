@@ -30,23 +30,25 @@ fn serve_html(path: &str, res: &mut Response) {
     let contents = std::str::from_utf8(asset.data.as_ref()).unwrap();
 
     let quic = QUIC_INFO.get().and_then(|o| o.as_ref());
-    let wt_port = quic
-        .map(|w| w.port.to_string())
-        .unwrap_or_else(|| "0".to_string());
+    let wt_port = quic.map(|w| w.port).unwrap_or(0);
     let wt_cert = quic.map(|w| w.cert_hash.as_str()).unwrap_or("");
 
     let timestamp = match clock::now().duration_since(UNIX_EPOCH) {
-        Ok(ts) => (ts.as_secs_f64() * 1_000.0).to_string(),
+        Ok(ts) => ts.as_secs_f64() * 1_000.0,
         Err(_) => {
             res.status_code(StatusCode::INTERNAL_SERVER_ERROR);
             return;
         }
     };
 
-    let body = contents
-        .replace("{{INITIAL_SERVER_TIME}}", &timestamp)
-        .replace("{{WEB_TRANSPORT_PORT}}", &wt_port)
-        .replace("{{WEB_TRANSPORT_CERT}}", wt_cert);
+    let vars = format!(
+        "window.INITIAL_SERVER_TIME = {};
+        window.WEB_TRANSPORT_PORT = {};
+        window.WEB_TRANSPORT_CERT = \"{}\"",
+        timestamp, wt_port, wt_cert,
+    );
+
+    let body = contents.replace("{{REPLACE}}", &vars);
 
     res.render(Text::Html(body));
 }
