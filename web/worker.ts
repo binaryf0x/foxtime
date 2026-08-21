@@ -131,14 +131,12 @@ async function sendWtRequest() {
 
   let timerId;
   try {
-    console.log("Sending WebTransport request...");
     const timeoutPromise = new Promise((_, reject) =>
       timerId = setTimeout(() => {
         reject("WebTransport write timed out.");
         try { wt!.close(); } catch (e) {}
       }, kConnectionTimeout));
     await Promise.race([wtWriter.write(dataView.buffer), timeoutPromise]);
-    console.log("Done.");
   } catch (e) {
     wt = undefined;
     wtWriter = undefined;
