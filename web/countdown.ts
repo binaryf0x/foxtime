@@ -42,6 +42,7 @@ function updateTime() {
   if (!targetInstant) {
     daysDisplay.textContent = lastDaysText = "";
     timeDisplay.textContent = lastTimeText = "??:??:??.?";
+    document.title = "🦊⌛";
     return;
   }
 
@@ -52,6 +53,7 @@ function updateTime() {
   let diff = targetInstant.epochMilliseconds - nowInstant.epochMilliseconds;
   if (diff <= 0) {
     diff = 0;
+    document.title = "🦊⌛";
   } else {
     shouldContinue = true;
   }
@@ -101,6 +103,7 @@ if (tParam) {
   const t = parseFloat(tParam);
   if (!isNaN(t)) {
     targetInstant = Temporal.Instant.fromEpochMilliseconds(Math.round(t * 1000));
+    document.title = "🦊⏳";
   }
 } else {
   settingsDialog.showModal();
@@ -125,6 +128,7 @@ targetTimeInput.addEventListener('change', () => {
     const plainDateTime = Temporal.PlainDateTime.from(targetTimeInput.value);
     const zdt = plainDateTime.toZonedDateTime(timezoneSelect.value);
     targetInstant = zdt.toInstant();
+    document.title = "🦊⏳";
     updateUrl();
     triggerUpdate();
   }
