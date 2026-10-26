@@ -12,12 +12,12 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
-    "@types/web": "^0.0.354",
+    "@types/web": "^0.0.359",
     "typescript": "^7.0.2",
-    "vite": "^8.2.0",
+    "vite": "^8.3.5",
     "vite-plugin-checker": "^0.14.5"
   },
   "dependencies": {
-    "temporal-polyfill": "^1.0.3"
+    "temporal-polyfill": "^1.0.6"
   }
 }
